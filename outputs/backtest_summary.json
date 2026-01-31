@@ -1,0 +1,17 @@
+{
+  "start_date": "2024-02-06",
+  "end_date": "2026-01-30",
+  "n_trading_days": 480,
+  "total_return": "nan%",
+  "annualized_return": "nan%",
+  "annualized_volatility": "68.83%",
+  "sharpe_ratio": "6.61",
+  "max_drawdown": "-49.80%",
+  "win_rate": "63.96%",
+  "avg_win": "4.00%",
+  "avg_loss": "-2.17%",
+  "profit_factor": "3.37",
+  "avg_hit_rate": "52.46%",
+  "avg_direction_accuracy": "50.62%",
+  "avg_rank_correlation": "0.060"
+}

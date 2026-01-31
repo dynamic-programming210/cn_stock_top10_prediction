@@ -1,0 +1,143 @@
+"""
+Configuration for Chinese Stock Top-10 Predictor
+Supports Shanghai (SHG) and Shenzhen (SHE) Stock Exchanges
+"""
+from pathlib import Path
+import os
+
+# ============ Paths ============
+PROJECT_ROOT = Path(__file__).parent
+DATA_DIR = PROJECT_ROOT / "data"
+OUTPUTS_DIR = PROJECT_ROOT / "outputs"
+MODELS_DIR = PROJECT_ROOT / "models"
+
+# Data files
+BARS_FILE = DATA_DIR / "bars.parquet"
+UNIVERSE_FILE = DATA_DIR / "universe.parquet"
+UNIVERSE_META_FILE = DATA_DIR / "universe_meta.parquet"
+FEATURES_FILE = DATA_DIR / "features.parquet"
+FEATURES_Z_FILE = DATA_DIR / "feat_z.parquet"
+NEWS_SENTIMENT_FILE = DATA_DIR / "news_sentiment.parquet"
+FUNDAMENTALS_FILE = DATA_DIR / "fundamentals.parquet"
+
+# Output files
+TOP10_LATEST_FILE = OUTPUTS_DIR / "top10_latest.parquet"
+TOP10_HISTORY_FILE = OUTPUTS_DIR / "top10_history.parquet"
+QUALITY_REPORT_FILE = OUTPUTS_DIR / "quality_report.json"
+
+# Model files
+RANKER_MODEL_FILE = MODELS_DIR / "ranker.txt"
+REGRESSOR_MODEL_FILE = MODELS_DIR / "regressor.pkl"
+
+# ============ API Configuration ============
+EODHD_API_TOKEN = os.environ.get("EODHD_API_TOKEN", "697c670dd1a9d9.07390782")
+EODHD_BASE_URL = "https://eodhd.com/api"
+
+# ============ Chinese Exchanges ============
+EXCHANGES = {
+    "SHG": "Shanghai Stock Exchange",
+    "SHE": "Shenzhen Stock Exchange"
+}
+
+# Exchange codes for API calls
+EXCHANGE_CODES = ["SHG", "SHE"]
+
+# ============ Universe Settings ============
+# Filter settings for stock selection
+MIN_PRICE = 2.0  # Minimum stock price (CNY)
+MIN_AVG_VOLUME = 1_000_000  # Minimum average daily volume
+MIN_MARKET_CAP = 5_000_000_000  # Minimum market cap (5B CNY) - approx large/mid cap
+
+# Universe size target (top stocks by market cap from each exchange)
+TARGET_UNIVERSE_SIZE = 500  # Top 500 stocks combined
+
+# ============ Data Settings ============
+LOOKBACK_DAYS = 365 * 3  # 3 years of historical data
+MIN_HISTORY_DAYS = 252  # Minimum 1 year of trading history required
+
+# ============ Feature Engineering ============
+# Return horizons (days)
+RETURN_HORIZONS = [1, 3, 5, 10, 20]
+
+# Feature columns used in model
+FEATURE_COLS = [
+    # Returns
+    'ret_1', 'ret_3', 'ret_5', 'ret_10', 'ret_20',
+    # Volatility
+    'vol_5', 'vol_10', 'vol_20',
+    # Volume signals
+    'volume_ratio_5', 'volume_ratio_10', 'volume_ratio_20',
+    'dollar_volume_5', 'dollar_volume_10',
+    # Price momentum
+    'price_vs_ma5', 'price_vs_ma10', 'price_vs_ma20', 'price_vs_ma50',
+    'ma5_vs_ma20', 'ma10_vs_ma50',
+    # High/Low signals
+    'high_20d_dist', 'low_20d_dist',
+    'hl_range_5', 'hl_range_10',
+    # Candlestick patterns
+    'body_ratio', 'upper_shadow', 'lower_shadow',
+    'gap_open', 'intraday_ret',
+    # China-specific features (涨跌停, T+1 effects)
+    'near_limit_up', 'near_limit_down',
+    'at_limit_up', 'at_limit_down',
+    'limit_up_count_5', 'limit_up_count_10',
+    'limit_down_count_5', 'limit_down_count_10',
+    'consec_limit_up', 'consec_limit_down',
+    'days_since_limit_up', 'days_since_limit_down',
+    'amplitude', 'amplitude_5d_avg',
+    'turnover_surge', 'close_position',
+    'gap_up', 'gap_down',
+    'strong_up_day', 'strong_down_day',
+    'up_days_5',
+    # Cross-sectional rank features
+    'ret_5_rank', 'vol_5_rank', 'volume_ratio_5_rank',
+    'amplitude_rank', 'turnover_surge_rank',
+]
+
+# Target column
+TARGET_COL = 'fwd_ret_5'  # 5-day forward return
+
+# ============ Model Settings ============
+CURRENT_MODEL_VERSION = "cn-v1.0.0"
+
+# LightGBM Ranker params
+RANKER_PARAMS = {
+    'objective': 'lambdarank',
+    'metric': 'ndcg',
+    'ndcg_eval_at': [5, 10],
+    'boosting_type': 'gbdt',
+    'num_leaves': 31,
+    'learning_rate': 0.05,
+    'feature_fraction': 0.8,
+    'bagging_fraction': 0.8,
+    'bagging_freq': 5,
+    'verbose': -1,
+    'n_estimators': 200,
+    'early_stopping_rounds': 20,
+}
+
+# Regressor params
+REGRESSOR_PARAMS = {
+    'n_estimators': 200,
+    'max_depth': 6,
+    'learning_rate': 0.05,
+    'subsample': 0.8,
+    'colsample_bytree': 0.8,
+    'random_state': 42,
+}
+
+# ============ Top-10 Selection ============
+TOP_K = 10
+MIN_RANK_SCORE = 0.3  # Minimum ranking score threshold
+
+# ============ Trading Calendar ============
+# Chinese market trading hours (for reference)
+MARKET_OPEN = "09:30"
+MARKET_CLOSE = "15:00"
+LUNCH_BREAK_START = "11:30"
+LUNCH_BREAK_END = "13:00"
+
+# ============ Create directories ============
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+MODELS_DIR.mkdir(parents=True, exist_ok=True)

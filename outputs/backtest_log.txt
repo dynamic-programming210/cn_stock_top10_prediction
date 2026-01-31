@@ -1,0 +1,34 @@
+INFO:__main__:Loading features from /Users/yadu/Documents/doc/cn_stock/data/feat_z.parquet
+INFO:__main__:Running backtest from 2024-02-06 00:00:00 to 2026-01-30 00:00:00
+INFO:__main__:Train window: 252 days, Test window: 21 days
+INFO:__main__:Fold 0: Train 2023-01-31 to 2024-02-05, Test 2024-02-06 to 2024-03-13
+INFO:models.train:Training on 613062 samples, 3033 symbols
+INFO:models.train:Train: 519088 rows, Val: 93974 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3322, Val: 0.2333
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(-0.01671938131763016), 'avg_direction_accuracy': np.float64(0.5387096774193548), 'positive_days_pct': np.float64(0.5483870967741935)}
+INFO:models.train:Training on 676799 samples, 3038 symbols
+INFO:models.train:Train: 573633 rows, Val: 103166 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3294, Val: 0.2218
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.009110417044494083), 'avg_direction_accuracy': np.float64(0.5852941176470589), 'positive_days_pct': np.float64(0.7058823529411765)}
+INFO:models.train:Training on 740619 samples, 3041 symbols
+INFO:models.train:Train: 628227 rows, Val: 112392 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3212, Val: 0.2686
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.00994889442225673), 'avg_direction_accuracy': np.float64(0.5513513513513514), 'positive_days_pct': np.float64(0.5675675675675675)}
+INFO:__main__:Fold 3: Train 2023-05-04 to 2024-05-17, Test 2024-05-20 to 2024-06-18
+INFO:models.train:Training on 762579 samples, 3043 symbols
+INFO:models.train:Train: 647026 rows, Val: 115553 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3248, Val: 0.2653
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.009199573258809468), 'avg_direction_accuracy': np.float64(0.5499999999999999), 'positive_days_pct': np.float64(0.631578947368421)}
+INFO:models.train:Training on 763455 samples, 3044 symbols
+INFO:models.train:Train: 647826 rows, Val: 115629 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3306, Val: 0.2639
+INFO:models.train:Training Stage 2: Regressor...

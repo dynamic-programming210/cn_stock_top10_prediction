@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-01-30T21:58:19.843038",
+  "asof_date": "2026-01-30",
+  "data": {
+    "total_bars": 2224588,
+    "unique_symbols": 3054,
+    "date_range": "2023-01-31 to 2026-01-30",
+    "exchanges": [
+      "SHE",
+      "SHG"
+    ]
+  },
+  "features": {
+    "total_rows": 2224588,
+    "unique_symbols": 3054
+  },
+  "coverage": {
+    "asof_date_rate": 0.9973804846103471
+  }
+}
