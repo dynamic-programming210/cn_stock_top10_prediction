@@ -9,15 +9,21 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Show immediate feedback before any imports that might fail
 st.set_page_config(
     page_title="🇨🇳 Chinese Stock Top-10 Predictor",
     page_icon="🇨🇳",
     layout="wide"
 )
 
+# Debug: Show that the app loaded
+st.write("✅ App entry point loaded successfully")
+
 try:
+    st.write("🔄 Loading main module...")
     # Import and run the main app
     from app.web import main
+    st.write("✅ Main module imported")
     main()
 except Exception as e:
     st.error(f"❌ Error loading application: {str(e)}")
