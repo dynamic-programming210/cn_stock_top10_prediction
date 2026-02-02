@@ -320,22 +320,32 @@ def main():
             pred_date = latest_df['date'].iloc[0]
             st.subheader(f"预测日期: {pred_date.strftime('%Y-%m-%d')}")
             
+            # Add sector info if not present
+            if 'sector_cn' not in latest_df.columns:
+                try:
+                    from data.sectors import get_stock_sector, get_sector_name
+                    latest_df['sector'] = latest_df['symbol'].apply(lambda x: get_stock_sector(str(x)))
+                    latest_df['sector_cn'] = latest_df['sector'].apply(lambda x: get_sector_name(x, chinese=True))
+                except ImportError:
+                    latest_df['sector_cn'] = '其他'
+            
             # Metrics row
             col1, col2, col3, col4 = st.columns(4)
             
             avg_pred_ret = latest_df['pred_ret_5'].mean()
             max_pred_ret = latest_df['pred_ret_5'].max()
             avg_confidence = latest_df['confidence_score'].mean() if 'confidence_score' in latest_df.columns else 0.7
+            num_sectors = latest_df['sector_cn'].nunique() if 'sector_cn' in latest_df.columns else 0
             
             col1.metric("平均预测收益", format_percent(avg_pred_ret))
             col2.metric("最高预测收益", format_percent(max_pred_ret))
             col3.metric("平均置信度", f"{avg_confidence:.0%}")
-            col4.metric("预测数量", len(latest_df))
+            col4.metric("覆盖行业数", f"{num_sectors}")
             
             st.markdown("---")
             
-            # Main table with confidence intervals
-            display_cols = ['symbol', 'name', 'exchange', 'close', 'pred_ret_5', 'pred_lower', 'pred_upper', 
+            # Main table with confidence intervals and sector
+            display_cols = ['symbol', 'name', 'sector_cn', 'exchange', 'close', 'pred_ret_5', 'pred_lower', 'pred_upper', 
                           'confidence_score', 'pred_price_5d', 'reason_human']
             display_df = latest_df[[c for c in display_cols if c in latest_df.columns]].copy()
             
@@ -367,6 +377,7 @@ def main():
             display_df = display_df.rename(columns={
                 'symbol': '股票代码',
                 'name': '股票名称',
+                'sector_cn': '行业',
                 'exchange': '交易所',
                 'close': '当前价格',
                 'pred_ret_5': '预测收益',

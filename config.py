@@ -92,13 +92,23 @@ FEATURE_COLS = [
     # Cross-sectional rank features
     'ret_5_rank', 'vol_5_rank', 'volume_ratio_5_rank',
     'amplitude_rank', 'turnover_surge_rank',
+    # Sector-relative features (compare within sector, not vs all stocks)
+    'ret_5_sector_rel', 'ret_10_sector_rel', 
+    'vol_5_sector_rel', 'volume_ratio_5_sector_rel',
+    'amplitude_sector_rel', 'turnover_surge_sector_rel',
+    'vs_sector_ret_5', 'vs_sector_volume',
+    'sector_ret_rank', 'sector_vol_rank',
 ]
 
 # Target column
 TARGET_COL = 'fwd_ret_5'  # 5-day forward return
 
+# ============ Sector Settings ============
+# Maximum stocks per sector in top-10 (for diversification)
+MAX_STOCKS_PER_SECTOR = 2
+
 # ============ Model Settings ============
-CURRENT_MODEL_VERSION = "cn-v1.0.0"
+CURRENT_MODEL_VERSION = "cn-v1.1.0"  # Updated for sector features
 
 # LightGBM Ranker params
 RANKER_PARAMS = {

@@ -234,8 +234,24 @@ class TwoStageModel:
         
         return df
     
-    def select_top10(self, df: pd.DataFrame, date: str = None) -> pd.DataFrame:
-        """Select top 10 stocks based on rank score"""
+    def select_top10(self, df: pd.DataFrame, date: str = None, 
+                     max_per_sector: int = None) -> pd.DataFrame:
+        """
+        Select top 10 stocks based on rank score with sector diversification.
+        
+        Args:
+            df: DataFrame with predictions
+            date: Date to select for (default: latest)
+            max_per_sector: Maximum stocks per sector (default: from config)
+        
+        Returns:
+            DataFrame with top 10 stocks, diversified across sectors
+        """
+        from config import MAX_STOCKS_PER_SECTOR
+        
+        if max_per_sector is None:
+            max_per_sector = MAX_STOCKS_PER_SECTOR
+            
         if date is None:
             date = df['date'].max()
         
@@ -249,14 +265,51 @@ class TwoStageModel:
         if 'rank_score' not in day_df.columns:
             day_df = self.predict(day_df)
         
+        # Add sector if not present
+        if 'sector' not in day_df.columns:
+            try:
+                from data.sectors import get_stock_sector
+                day_df['sector'] = day_df['symbol'].apply(lambda x: get_stock_sector(str(x)))
+            except ImportError:
+                logger.warning("Sector module not available, skipping sector diversification")
+                day_df['sector'] = 'other'
+        
         # Sort by rank score descending
         day_df = day_df.sort_values('rank_score', ascending=False)
         
-        # Take top K
-        top = day_df.head(TOP_K).copy()
+        # Select top stocks with sector diversification
+        selected = []
+        sector_counts = {}
         
-        # Add rank
-        top['rank'] = range(1, len(top) + 1)
+        for _, row in day_df.iterrows():
+            sector = row.get('sector', 'other')
+            current_count = sector_counts.get(sector, 0)
+            
+            # Check if we can add more from this sector
+            if current_count < max_per_sector:
+                selected.append(row)
+                sector_counts[sector] = current_count + 1
+                
+                if len(selected) >= TOP_K:
+                    break
+        
+        if len(selected) < TOP_K:
+            logger.warning(f"Only found {len(selected)} stocks meeting sector constraints")
+        
+        top = pd.DataFrame(selected)
+        
+        # Add rank and sector info
+        if not top.empty:
+            top['rank'] = range(1, len(top) + 1)
+            
+            # Add Chinese sector names
+            try:
+                from data.sectors import get_sector_name
+                top['sector_cn'] = top['sector'].apply(lambda x: get_sector_name(x, chinese=True))
+                top['sector_en'] = top['sector'].apply(lambda x: get_sector_name(x, chinese=False))
+            except ImportError:
+                top['sector_cn'] = top['sector']
+                top['sector_en'] = top['sector']
         
         return top
     

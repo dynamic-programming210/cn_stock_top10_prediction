@@ -226,6 +226,68 @@ def compute_china_specific_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def compute_sector_relative_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute sector-relative features to compare stocks within their sector.
+    This prevents sectors like banking from dominating due to their unique characteristics.
+    """
+    df = df.copy()
+    
+    # Import sector classification
+    try:
+        from data.sectors import get_stock_sector, add_sector_to_dataframe
+        
+        # Add sector column if not present
+        if 'sector' not in df.columns:
+            logger.info("Adding sector classification...")
+            # Get unique symbols and their sectors
+            unique_symbols = df[['symbol']].drop_duplicates()
+            unique_symbols['sector'] = unique_symbols['symbol'].apply(
+                lambda x: get_stock_sector(str(x))
+            )
+            df = df.merge(unique_symbols[['symbol', 'sector']], on='symbol', how='left')
+        
+        # Features to compute sector-relative versions for
+        sector_relative_features = [
+            'ret_5', 'ret_10', 'ret_20',
+            'vol_5', 'vol_10', 
+            'volume_ratio_5', 'volume_ratio_10',
+            'dollar_volume_5', 'dollar_volume_10',
+            'amplitude', 'turnover_surge',
+            'price_vs_ma5', 'price_vs_ma20',
+        ]
+        
+        logger.info(f"Computing sector-relative features for {df['sector'].nunique()} sectors...")
+        
+        for col in sector_relative_features:
+            if col in df.columns:
+                # Sector-relative z-score: compare within sector on same day
+                df[f'{col}_sector_rel'] = df.groupby(['date', 'sector'])[col].transform(
+                    lambda x: (x - x.mean()) / (x.std() + 1e-8)
+                )
+        
+        # Sector momentum: how is this sector performing vs market?
+        df['sector_ret_5'] = df.groupby(['date', 'sector'])['ret_5'].transform('mean')
+        df['vs_sector_ret_5'] = df['ret_5'] - df['sector_ret_5']
+        
+        # Sector volume: is this sector getting more attention?
+        df['sector_volume_ratio'] = df.groupby(['date', 'sector'])['volume_ratio_5'].transform('mean')
+        df['vs_sector_volume'] = df['volume_ratio_5'] - df['sector_volume_ratio']
+        
+        # Rank within sector
+        df['sector_ret_rank'] = df.groupby(['date', 'sector'])['ret_5'].rank(pct=True)
+        df['sector_vol_rank'] = df.groupby(['date', 'sector'])['volume_ratio_5'].rank(pct=True)
+        
+        logger.info(f"Added {len(sector_relative_features)} sector-relative features")
+        
+    except ImportError as e:
+        logger.warning(f"Could not import sector module: {e}. Skipping sector features.")
+    except Exception as e:
+        logger.warning(f"Error computing sector features: {e}. Skipping.")
+    
+    return df
+
+
 def compute_rank_features(df: pd.DataFrame) -> pd.DataFrame:
     """Compute cross-sectional rank features"""
     df = df.copy()
@@ -303,6 +365,10 @@ def build_features(bars: pd.DataFrame = None,
     logger.info("Computing rank features...")
     df = compute_rank_features(df)
     
+    # NEW: Compute sector-relative features
+    logger.info("Computing sector-relative features...")
+    df = compute_sector_relative_features(df)
+    
     # Save raw features
     if save:
         df.to_parquet(FEATURES_FILE, index=False)
@@ -312,7 +378,10 @@ def build_features(bars: pd.DataFrame = None,
     if zscore:
         logger.info("Z-scoring features...")
         available_cols = [c for c in FEATURE_COLS if c in df.columns]
-        df_z = zscore_features(df, available_cols)
+        # Also include sector-relative features in z-scoring
+        sector_rel_cols = [c for c in df.columns if '_sector_rel' in c or c.startswith('vs_sector') or c.startswith('sector_')]
+        all_zscore_cols = list(set(available_cols + sector_rel_cols))
+        df_z = zscore_features(df, all_zscore_cols)
         
         if save:
             df_z.to_parquet(FEATURES_Z_FILE, index=False)
