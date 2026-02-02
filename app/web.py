@@ -39,21 +39,48 @@ def load_latest_top10():
     return pd.DataFrame()
 
 
+@st.cache_data(ttl=3600)
+def load_chinese_names():
+    """Load Chinese stock names from CSV file"""
+    csv_path = Path(__file__).parent.parent / "cn_stocks_shg_she_code_name.csv"
+    if csv_path.exists():
+        try:
+            cn_names = pd.read_csv(csv_path, dtype={'code': str})
+            # Ensure code is string with proper padding
+            cn_names['code'] = cn_names['code'].str.zfill(6)
+            return dict(zip(cn_names['code'], cn_names['name']))
+        except Exception:
+            return {}
+    return {}
+
+
 def merge_stock_names(df: pd.DataFrame) -> pd.DataFrame:
-    """Merge stock names from universe metadata"""
+    """Merge stock names - prefer Chinese names from CSV, fallback to English from metadata"""
     if df.empty:
         return df
+    
+    # Load Chinese names from CSV
+    cn_names_dict = load_chinese_names()
+    
+    # Load English names from universe metadata
     universe = load_universe_meta()
-    if universe.empty or 'name' not in universe.columns:
-        df['name'] = ''
-        return df
-    # Merge on symbol
-    df = df.merge(
-        universe[['symbol', 'name']].drop_duplicates('symbol'),
-        on='symbol',
-        how='left'
-    )
-    df['name'] = df['name'].fillna('')
+    en_names_dict = {}
+    if not universe.empty and 'name' in universe.columns:
+        en_names_dict = dict(zip(universe['symbol'], universe['name']))
+    
+    # Extract stock code from symbol (e.g., "000001.SHE" -> "000001")
+    def get_name(symbol):
+        code = symbol.split('.')[0]
+        # Prefer Chinese name if available
+        if code in cn_names_dict:
+            return cn_names_dict[code]
+        # Fallback to English name
+        if symbol in en_names_dict:
+            return en_names_dict[symbol]
+        return ''
+    
+    df = df.copy()
+    df['name'] = df['symbol'].apply(get_name)
     return df
 
 

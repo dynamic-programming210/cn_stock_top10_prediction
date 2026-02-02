@@ -239,11 +239,21 @@ def compute_rank_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def zscore_features(df: pd.DataFrame, feature_cols: List[str]) -> pd.DataFrame:
-    """Z-score features cross-sectionally by date"""
+    """Z-score features cross-sectionally by date.
+    
+    Note: Binary columns (0/1 indicators) should be excluded from z-scoring.
+    """
     df = df.copy()
     
+    # Columns to exclude from z-scoring (binary flags)
+    binary_cols = {
+        'at_limit_up', 'at_limit_down', 
+        'near_limit_up', 'near_limit_down',
+        # Any other binary columns can be added here
+    }
+    
     for col in feature_cols:
-        if col in df.columns:
+        if col in df.columns and col not in binary_cols:
             df[col] = df.groupby('date')[col].transform(
                 lambda x: (x - x.mean()) / (x.std() + 1e-8)
             )

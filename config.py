@@ -130,6 +130,26 @@ REGRESSOR_PARAMS = {
 TOP_K = 10
 MIN_RANK_SCORE = 0.3  # Minimum ranking score threshold
 
+# ============ Transaction Costs (China A-shares) ============
+# Stamp tax: 0.1% on sell only (set by government)
+# Commission: ~0.025% each way (negotiable, using conservative estimate)
+# Slippage: estimated market impact
+STAMP_TAX = 0.001  # 0.1% on sell
+COMMISSION_RATE = 0.00025  # 0.025% each way
+SLIPPAGE = 0.001  # 0.1% estimated slippage
+# Total round-trip cost: buy commission + sell commission + stamp tax + slippage
+ROUND_TRIP_COST = COMMISSION_RATE * 2 + STAMP_TAX + SLIPPAGE * 2  # ~0.35%
+
+# ============ Liquidity & Trading Filters ============
+# Minimum daily dollar volume to ensure tradability
+# For raw values: 50M CNY
+MIN_DOLLAR_VOLUME = 50_000_000  # 50M CNY daily volume (for raw features)
+# For z-scored features: use z-score threshold (roughly -0.35 corresponds to 50M CNY)
+MIN_DOLLAR_VOLUME_ZSCORE = -0.35  # Use when working with z-scored features
+# Limit-up threshold (10% for main board, 20% for STAR/ChiNext - using conservative 9.8%)
+LIMIT_UP_THRESHOLD = 0.098  # Stocks at 9.8%+ gain can't be bought
+LIMIT_DOWN_THRESHOLD = -0.098  # Stocks at 9.8%+ loss may be hard to sell
+
 # ============ Trading Calendar ============
 # Chinese market trading hours (for reference)
 MARKET_OPEN = "09:30"

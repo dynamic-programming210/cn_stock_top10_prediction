@@ -15,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import (
     FEATURES_Z_FILE, FEATURE_COLS, TARGET_COL, TOP_K,
-    OUTPUTS_DIR
+    OUTPUTS_DIR, ROUND_TRIP_COST, MIN_DOLLAR_VOLUME_ZSCORE,
+    LIMIT_UP_THRESHOLD, LIMIT_DOWN_THRESHOLD
 )
 from models.train import TwoStageModel
 
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class Backtester:
-    """Walk-forward backtesting for stock ranking model"""
+    """Walk-forward backtesting for stock ranking model with realistic costs"""
     
     def __init__(self, 
                  train_window: int = 252,  # ~1 year training
@@ -32,14 +33,66 @@ class Backtester:
                  min_train_samples: int = 5000,
                  top_k: int = TOP_K,
                  max_train_symbols: int = None,  # Limit symbols for faster training
-                 fast_mode: bool = False):  # Use faster model settings
+                 fast_mode: bool = False,  # Use faster model settings
+                 apply_costs: bool = True,  # Apply transaction costs
+                 apply_filters: bool = True):  # Apply liquidity & limit-up filters
         self.train_window = train_window
         self.test_window = test_window
         self.min_train_samples = min_train_samples
         self.top_k = top_k
         self.max_train_symbols = max_train_symbols
         self.fast_mode = fast_mode
+        self.apply_costs = apply_costs
+        self.apply_filters = apply_filters
         self.results = []
+        
+    def _filter_tradable_stocks(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Filter out stocks that can't be traded:
+        1. Stocks at limit-up (涨停) - can't buy
+        2. Stocks with insufficient liquidity
+        3. Stocks at limit-down (跌停) - risky to include
+        
+        Uses binary indicator columns (at_limit_up, at_limit_down) which should
+        NOT be z-scored, so values are 0 or 1.
+        """
+        if not self.apply_filters:
+            return df
+            
+        original_count = len(df)
+        
+        # Filter 1: Exclude stocks at limit-up (can't buy these)
+        # Prefer binary columns if available
+        if 'at_limit_up' in df.columns:
+            # Binary column should have values 0/1
+            # Check if it looks like z-scored (has non-0/1 values)
+            is_binary = df['at_limit_up'].isin([0, 1, 0.0, 1.0]).all()
+            if is_binary:
+                df = df[df['at_limit_up'] == 0]
+            else:
+                # Fallback: use threshold for potentially z-scored data
+                df = df[df['at_limit_up'] <= 0.5]
+        
+        # Filter 2: Exclude stocks at limit-down (risky, may not be able to sell)
+        if 'at_limit_down' in df.columns:
+            is_binary = df['at_limit_down'].isin([0, 1, 0.0, 1.0]).all()
+            if is_binary:
+                df = df[df['at_limit_down'] == 0]
+            else:
+                df = df[df['at_limit_down'] <= 0.5]
+        
+        # Filter 3: Liquidity filter - minimum dollar volume (z-scored)
+        if 'dollar_volume_5' in df.columns:
+            df = df[df['dollar_volume_5'] >= MIN_DOLLAR_VOLUME_ZSCORE]
+        
+        filtered_count = len(df)
+        if original_count > 0 and filtered_count < original_count * 0.5:
+            logger.debug(f"Filtered {original_count - filtered_count} untradable stocks "
+                        f"({100*(original_count-filtered_count)/original_count:.1f}%)")
+        
+        return df
+        
+        return df
         
     def run_backtest(self, 
                      df: pd.DataFrame,
@@ -142,6 +195,12 @@ class Backtester:
                 if len(day_df) < self.top_k:
                     continue
                 
+                # Apply tradability filters (limit-up, liquidity)
+                day_df = self._filter_tradable_stocks(day_df)
+                
+                if len(day_df) < self.top_k:
+                    continue
+                
                 # Get top-k predictions
                 pred_df = model.predict(day_df)
                 # Filter out any rows where prediction failed (NaN rank_score)
@@ -171,6 +230,11 @@ class Backtester:
         # Actual returns of top-k stocks
         actual_returns = top_k[TARGET_COL].values
         pred_returns = top_k['pred_ret_5'].values
+        
+        # Apply transaction costs if enabled
+        # Each trade incurs round-trip cost (buy + sell)
+        if self.apply_costs:
+            actual_returns = actual_returns - ROUND_TRIP_COST
         
         # Metrics
         avg_return = np.mean(actual_returns) if len(actual_returns) > 0 else 0
@@ -219,7 +283,9 @@ class Backtester:
             return {}
         
         # Cumulative returns (assuming daily rebalance)
+        # Drop NaN returns before computing cumulative
         results_df = results_df.sort_values('date')
+        results_df = results_df.dropna(subset=['avg_return'])
         results_df['cum_return'] = (1 + results_df['avg_return']).cumprod() - 1
         
         # Annualized metrics
@@ -269,6 +335,9 @@ class Backtester:
             'avg_hit_rate': f"{results_df['hit_rate'].mean():.2%}",
             'avg_direction_accuracy': f"{results_df['direction_accuracy'].mean():.2%}",
             'avg_rank_correlation': f"{results_df['rank_correlation'].mean():.3f}",
+            'apply_costs': self.apply_costs,
+            'apply_filters': self.apply_filters,
+            'round_trip_cost': f"{ROUND_TRIP_COST:.2%}" if self.apply_costs else "N/A",
         }
     
     def save_results(self, results_df: pd.DataFrame, filepath: str = None):
@@ -293,7 +362,9 @@ def run_backtest(features_file: str = None,
                  start_date: str = None,
                  end_date: str = None,
                  max_train_symbols: int = None,
-                 fast_mode: bool = False) -> Tuple[pd.DataFrame, Dict]:
+                 fast_mode: bool = False,
+                 apply_costs: bool = True,
+                 apply_filters: bool = True) -> Tuple[pd.DataFrame, Dict]:
     """
     Run full backtest and return results
     
@@ -305,6 +376,8 @@ def run_backtest(features_file: str = None,
         end_date: Backtest end date
         max_train_symbols: Max symbols for training (speeds up backtest)
         fast_mode: Use faster model settings
+        apply_costs: Apply transaction costs (~0.35% round-trip)
+        apply_filters: Apply liquidity and limit-up filters
         
     Returns:
         Tuple of (results_df, summary_dict)
@@ -312,6 +385,7 @@ def run_backtest(features_file: str = None,
     # Load data
     features_file = features_file or FEATURES_Z_FILE
     logger.info(f"Loading features from {features_file}")
+    logger.info(f"Apply costs: {apply_costs}, Apply filters: {apply_filters}")
     df = pd.read_parquet(features_file)
     
     # Run backtest
@@ -319,7 +393,9 @@ def run_backtest(features_file: str = None,
         train_window=train_window,
         test_window=test_window,
         max_train_symbols=max_train_symbols,
-        fast_mode=fast_mode
+        fast_mode=fast_mode,
+        apply_costs=apply_costs,
+        apply_filters=apply_filters
     )
     
     results_df = backtester.run_backtest(
@@ -344,6 +420,11 @@ def print_backtest_summary(summary: Dict):
     print("="*60)
     print(f"Period: {summary.get('start_date', 'N/A')} to {summary.get('end_date', 'N/A')}")
     print(f"Trading Days: {summary.get('n_trading_days', 0)}")
+    print("-"*60)
+    print(f"Costs Applied:       {summary.get('apply_costs', False)}")
+    print(f"Filters Applied:     {summary.get('apply_filters', False)}")
+    if summary.get('apply_costs'):
+        print(f"Round-Trip Cost:     {summary.get('round_trip_cost', 'N/A')}")
     print("-"*60)
     print(f"Total Return:        {summary.get('total_return', 'N/A')}")
     print(f"Annualized Return:   {summary.get('annualized_return', 'N/A')}")
@@ -373,6 +454,8 @@ if __name__ == "__main__":
     parser.add_argument('--features', type=str, default=None, help="Path to features file")
     parser.add_argument('--max-symbols', type=int, default=None, help="Max symbols to use for training (faster)")
     parser.add_argument('--fast', action='store_true', help="Use fast mode (fewer trees, shallower)")
+    parser.add_argument('--no-costs', action='store_true', help="Disable transaction costs")
+    parser.add_argument('--no-filters', action='store_true', help="Disable liquidity/limit-up filters")
     
     args = parser.parse_args()
     
@@ -383,7 +466,9 @@ if __name__ == "__main__":
         start_date=args.start_date,
         end_date=args.end_date,
         max_train_symbols=args.max_symbols,
-        fast_mode=args.fast
+        fast_mode=args.fast,
+        apply_costs=not args.no_costs,
+        apply_filters=not args.no_filters
     )
     
     print_backtest_summary(summary)

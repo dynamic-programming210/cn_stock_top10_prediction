@@ -32,3 +32,144 @@ INFO:models.train:Train: 647826 rows, Val: 115629 rows
 INFO:models.train:Training Stage 1: RandomForest Ranker...
 INFO:models.train:Ranker accuracy - Train: 0.3306, Val: 0.2639
 INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.01291352854146075), 'avg_direction_accuracy': np.float64(0.5368421052631579), 'positive_days_pct': np.float64(0.5)}
+INFO:models.train:Training on 764113 samples, 3044 symbols
+INFO:models.train:Train: 648452 rows, Val: 115661 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3318, Val: 0.2631
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(-0.00103996827711895), 'avg_direction_accuracy': np.float64(0.4236842105263157), 'positive_days_pct': np.float64(0.34210526315789475)}
+INFO:__main__:Fold 6: Train 2023-08-03 to 2024-08-15, Test 2024-08-16 to 2024-09-13
+INFO:models.train:Training on 764589 samples, 3044 symbols
+INFO:models.train:Train: 648926 rows, Val: 115663 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3315, Val: 0.2767
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.008185709259905017), 'avg_direction_accuracy': np.float64(0.5236842105263159), 'positive_days_pct': np.float64(0.631578947368421)}
+INFO:models.train:Training on 764999 samples, 3044 symbols
+INFO:models.train:Train: 649332 rows, Val: 115667 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3320, Val: 0.2640
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(-0.0007741217336204373), 'avg_direction_accuracy': np.float64(0.47105263157894744), 'positive_days_pct': np.float64(0.47368421052631576)}
+INFO:models.train:Training on 765390 samples, 3044 symbols
+INFO:models.train:Train: 649726 rows, Val: 115664 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3328, Val: 0.2476
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.03141591150481196), 'avg_direction_accuracy': np.float64(0.5421052631578946), 'positive_days_pct': np.float64(0.6052631578947368)}
+INFO:__main__:Fold 9: Train 2023-11-08 to 2024-11-21, Test 2024-11-22 to 2024-12-20
+INFO:models.train:Training on 765785 samples, 3045 symbols
+INFO:models.train:Train: 650114 rows, Val: 115671 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3303, Val: 0.2664
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.026697383707784177), 'avg_direction_accuracy': np.float64(0.5684210526315789), 'positive_days_pct': np.float64(0.6052631578947368)}
+INFO:models.train:Training on 766182 samples, 3045 symbols
+INFO:models.train:Train: 650482 rows, Val: 115700 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3312, Val: 0.2924
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.03267104727403367), 'avg_direction_accuracy': np.float64(0.4921052631578948), 'positive_days_pct': np.float64(0.6578947368421053)}
+INFO:models.train:Training on 766532 samples, 3045 symbols
+INFO:models.train:Train: 650822 rows, Val: 115710 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3327, Val: 0.2741
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(-0.0019406205274342808), 'avg_direction_accuracy': np.float64(0.5342105263157894), 'positive_days_pct': np.float64(0.5)}
+INFO:__main__:Fold 12: Train 2024-02-06 to 2025-02-27, Test 2025-02-28 to 2025-03-28
+INFO:models.train:Training on 766797 samples, 3045 symbols
+INFO:models.train:Train: 651087 rows, Val: 115710 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3316, Val: 0.2697
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.009425961971937081), 'avg_direction_accuracy': np.float64(0.5394736842105263), 'positive_days_pct': np.float64(0.5)}
+INFO:models.train:Training on 767005 samples, 3045 symbols
+INFO:models.train:Train: 651295 rows, Val: 115710 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3270, Val: 0.2857
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.02803796751246263), 'avg_direction_accuracy': np.float64(0.5368421052631579), 'positive_days_pct': np.float64(0.6842105263157895)}
+INFO:models.train:Training on 767115 samples, 3045 symbols
+INFO:models.train:Train: 651420 rows, Val: 115695 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3252, Val: 0.2821
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.019998430489508678), 'avg_direction_accuracy': np.float64(0.5868421052631579), 'positive_days_pct': np.float64(0.6052631578947368)}
+INFO:__main__:Fold 15: Train 2024-05-20 to 2025-06-03, Test 2025-06-04 to 2025-07-02
+INFO:models.train:Training on 767180 samples, 3046 symbols
+INFO:models.train:Train: 651479 rows, Val: 115701 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3286, Val: 0.2875
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.048678985996188084), 'avg_direction_accuracy': np.float64(0.6552631578947367), 'positive_days_pct': np.float64(0.9736842105263158)}
+INFO:models.train:Training on 767251 samples, 3047 symbols
+INFO:models.train:Train: 651500 rows, Val: 115751 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3266, Val: 0.2940
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.04181264482765383), 'avg_direction_accuracy': np.float64(0.5289473684210525), 'positive_days_pct': np.float64(0.9736842105263158)}
+INFO:models.train:Training on 767313 samples, 3048 symbols
+INFO:models.train:Train: 651532 rows, Val: 115781 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3274, Val: 0.2924
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.021882188330206942), 'avg_direction_accuracy': np.float64(0.47368421052631576), 'positive_days_pct': np.float64(0.868421052631579)}
+INFO:__main__:Fold 18: Train 2024-08-16 to 2025-08-29, Test 2025-09-01 to 2025-09-29
+INFO:models.train:Training on 767432 samples, 3050 symbols
+INFO:models.train:Train: 651600 rows, Val: 115832 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3293, Val: 0.2836
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.01352699765298369), 'avg_direction_accuracy': np.float64(0.5026315789473684), 'positive_days_pct': np.float64(0.7631578947368421)}
+INFO:models.train:Training on 767574 samples, 3051 symbols
+INFO:models.train:Train: 651662 rows, Val: 115912 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3319, Val: 0.2801
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.02589951630261821), 'avg_direction_accuracy': np.float64(0.48421052631578954), 'positive_days_pct': np.float64(0.7894736842105263)}
+INFO:models.train:Training on 767719 samples, 3051 symbols
+INFO:models.train:Train: 651792 rows, Val: 115927 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3328, Val: 0.2911
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.051696271950445793), 'avg_direction_accuracy': np.float64(0.6052631578947368), 'positive_days_pct': np.float64(0.9736842105263158)}
+INFO:__main__:Fold 21: Train 2024-11-22 to 2025-12-04, Test 2025-12-05 to 2026-01-06
+INFO:models.train:Training on 767859 samples, 3051 symbols
+INFO:models.train:Train: 651928 rows, Val: 115931 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3324, Val: 0.2902
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.04357516894164001), 'avg_direction_accuracy': np.float64(0.5236842105263159), 'positive_days_pct': np.float64(0.8157894736842105)}
+INFO:models.train:Training on 768014 samples, 3054 symbols
+INFO:models.train:Train: 652047 rows, Val: 115967 rows
+INFO:models.train:Training Stage 1: RandomForest Ranker...
+INFO:models.train:Ranker accuracy - Train: 0.3304, Val: 0.2780
+INFO:models.train:Training Stage 2: Regressor...
+INFO:models.train:Validation metrics: {'avg_top10_return': np.float64(0.01955966081072834), 'avg_direction_accuracy': np.float64(0.5236842105263158), 'positive_days_pct': np.float64(0.6578947368421053)}
+INFO:__main__:Backtest complete: 23 folds, 480 trading days
+INFO:__main__:Saved backtest results to /Users/yadu/Documents/doc/cn_stock/outputs/backtest_results.parquet
+INFO:__main__:Saved backtest summary to /Users/yadu/Documents/doc/cn_stock/outputs/backtest_summary.json
+
+============================================================
+           BACKTEST SUMMARY
+============================================================
+Period: 2024-02-06 to 2026-01-30
+Trading Days: 480
+------------------------------------------------------------
+Total Return:        nan%
+Annualized Return:   nan%
+Annualized Vol:      70.44%
+Sharpe Ratio:        7.79
+Max Drawdown:        -39.68%
+------------------------------------------------------------
+Win Rate:            67.29%
+Avg Win:             4.32%
+Avg Loss:            -2.33%
+Profit Factor:       3.93
+------------------------------------------------------------
+Avg Hit Rate:        53.56%
+Avg Direction Acc:   51.35%
+Avg Rank Corr:       0.056
+============================================================
+
