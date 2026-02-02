@@ -27,7 +27,7 @@ env:
 jobs:
   update-predictions:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 240  # 4 hours for full data refresh + training
     
     steps:
       - name: Checkout repository
