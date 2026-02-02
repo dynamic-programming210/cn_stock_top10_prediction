@@ -17,12 +17,15 @@ from config import (
     UNIVERSE_META_FILE, CURRENT_MODEL_VERSION, OUTPUTS_DIR, EXCHANGES
 )
 
-# Page config
-st.set_page_config(
-    page_title="🇨🇳 Chinese Stock Top-10 Predictor",
-    page_icon="🇨🇳",
-    layout="wide"
-)
+# Page config - wrapped in try/except for import compatibility
+try:
+    st.set_page_config(
+        page_title="🇨🇳 Chinese Stock Top-10 Predictor",
+        page_icon="🇨🇳",
+        layout="wide"
+    )
+except st.errors.StreamlitAPIException:
+    pass  # Already set by entry point
 
 
 # ============ Data Loading Functions ============
