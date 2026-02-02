@@ -47,3 +47,4 @@ calc_stats.py
 
 # Logs
 *.log
+.streamlit/secrets.toml
