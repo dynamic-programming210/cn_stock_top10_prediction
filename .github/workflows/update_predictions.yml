@@ -1,0 +1,121 @@
+name: Update Stock Predictions
+
+on:
+  # Manual trigger with options
+  workflow_dispatch:
+    inputs:
+      full_refresh:
+        description: 'Full data refresh (fetch all history)'
+        required: false
+        default: 'false'
+        type: boolean
+      retrain_model:
+        description: 'Retrain the model'
+        required: false
+        default: 'true'
+        type: boolean
+  
+  # Scheduled runs (UTC time)
+  # Chinese market closes at 15:00 CST = 07:00 UTC
+  # Run at 08:00 UTC (16:00 CST) on weekdays
+  schedule:
+    - cron: '0 8 * * 1-5'
+
+env:
+  EODHD_API_TOKEN: ${{ secrets.EODHD_API_TOKEN }}
+
+jobs:
+  update-predictions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Fetch latest stock data
+        run: |
+          echo "📊 Fetching latest stock data..."
+          if [ "${{ github.event.inputs.full_refresh }}" = "true" ]; then
+            python data/fetch_eodhd.py --full-refresh
+          else
+            python data/fetch_eodhd.py
+          fi
+      
+      - name: Build features
+        run: |
+          echo "🔧 Building features..."
+          python features/build_features.py
+      
+      - name: Train model
+        if: ${{ github.event.inputs.retrain_model == 'true' || github.event_name == 'schedule' }}
+        run: |
+          echo "🤖 Training model..."
+          python models/train.py --retrain
+      
+      - name: Generate predictions
+        run: |
+          echo "🎯 Generating predictions..."
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from models.train import generate_predictions
+          generate_predictions()
+          print('✅ Predictions generated successfully!')
+          "
+      
+      - name: Show latest predictions
+        run: |
+          echo "📋 Latest Top-10 Predictions:"
+          python show_predictions.py
+      
+      - name: Commit and push updates
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Add updated files
+          git add data/*.parquet
+          git add outputs/*.parquet outputs/*.json outputs/*.txt
+          git add models/*.pkl models/*.txt
+          
+          # Check if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "🤖 Auto-update: predictions for $(date -u +%Y-%m-%d)"
+            git push
+            echo "✅ Changes committed and pushed!"
+          fi
+      
+      - name: Upload predictions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: predictions-${{ github.run_id }}
+          path: |
+            outputs/top10_latest.parquet
+            outputs/quality_report.json
+          retention-days: 30
+      
+      - name: Summary
+        run: |
+          echo "## 🎉 Update Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Latest Top-10 Predictions" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          python show_predictions.py >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
