@@ -387,6 +387,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Train stock prediction model")
     parser.add_argument('--features', type=str, default=None, help="Path to features file")
+    parser.add_argument('--retrain', action='store_true', help="Force retrain the model")
     
     args = parser.parse_args()
     
