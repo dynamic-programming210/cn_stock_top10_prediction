@@ -1,58 +1,60 @@
 """
 Streamlit App Entry Point for Streamlit Cloud
-This file serves as an alternative entry point with better error handling
+Minimal entry point with maximum error handling
 """
 import streamlit as st
-import sys
-from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent))
-
-# Show immediate feedback before any imports that might fail
 st.set_page_config(
     page_title="🇨🇳 Chinese Stock Top-10 Predictor",
     page_icon="🇨🇳",
     layout="wide"
 )
 
-# Debug: Show that the app loaded
-st.write("✅ App entry point loaded successfully")
+import sys
+import traceback
+from pathlib import Path
+
+# Show startup info
+st.write("🚀 Starting app...")
+st.write(f"Python version: {sys.version}")
+st.write(f"Working directory: {Path.cwd()}")
 
 try:
-    st.write("🔄 Loading main module...")
-    # Import and run the main app
-    from app.web import main
-    st.write("✅ Main module imported")
-    main()
-except Exception as e:
-    st.error(f"❌ Error loading application: {str(e)}")
-    st.exception(e)
-    
-    # Show debug info
-    st.markdown("---")
-    st.subheader("🔍 Debug Information")
-    
-    st.write("**Python Path:**")
-    st.code("\n".join(sys.path[:5]))
-    
-    st.write("**Project Files:**")
+    # Add project root to path
     project_root = Path(__file__).parent
-    try:
-        files = list(project_root.glob("**/*.py"))[:20]
-        st.code("\n".join(str(f.relative_to(project_root)) for f in files))
-    except Exception as fe:
-        st.write(f"Error listing files: {fe}")
+    sys.path.insert(0, str(project_root))
+    st.write(f"✅ Project root: {project_root}")
     
-    st.write("**Data Files:**")
+    # List files to verify deployment
+    st.write("📁 Files in project root:")
+    files = list(project_root.iterdir())[:15]
+    for f in files:
+        st.write(f"  - {f.name}")
+    
+    # Check data directory
     data_dir = project_root / "data"
     if data_dir.exists():
-        try:
-            data_files = list(data_dir.glob("*"))
-            for f in data_files:
-                size = f.stat().st_size / 1024 / 1024 if f.is_file() else 0
-                st.write(f"  {f.name}: {size:.2f} MB")
-        except Exception as de:
-            st.write(f"Error listing data: {de}")
+        st.write("📁 Files in data/:")
+        for f in list(data_dir.iterdir())[:10]:
+            size_mb = f.stat().st_size / 1024 / 1024 if f.is_file() else 0
+            st.write(f"  - {f.name} ({size_mb:.2f} MB)")
     else:
-        st.write("Data directory not found")
+        st.error("❌ data/ directory not found!")
+    
+    # Try importing config
+    st.write("🔄 Importing config...")
+    from config import TOP10_LATEST_FILE, OUTPUTS_DIR
+    st.write(f"✅ Config imported. TOP10_LATEST_FILE exists: {TOP10_LATEST_FILE.exists()}")
+    
+    # Try importing main app
+    st.write("🔄 Importing app.web...")
+    from app.web import main
+    st.write("✅ app.web imported successfully")
+    
+    # Run main app
+    st.write("🔄 Running main()...")
+    main()
+    
+except Exception as e:
+    st.error(f"❌ Error: {type(e).__name__}: {str(e)}")
+    st.code(traceback.format_exc())
