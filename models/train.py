@@ -382,6 +382,43 @@ def load_model() -> TwoStageModel:
     return model
 
 
+def generate_predictions(features_file: str = None, output_file: str = None):
+    """Generate top-10 predictions for the latest date"""
+    from config import FEATURES_Z_FILE, TOP10_LATEST_FILE, MAX_STOCKS_PER_SECTOR
+    from data.sectors import get_stock_sector
+    
+    features_file = features_file or FEATURES_Z_FILE
+    output_file = output_file or TOP10_LATEST_FILE
+    
+    logger.info(f"Loading features from {features_file}")
+    df = pd.read_parquet(features_file)
+    
+    # Add sector info
+    logger.info("Adding sector information...")
+    df['sector'] = df['symbol'].apply(lambda x: get_stock_sector(str(x)))
+    
+    # Load model
+    logger.info("Loading model...")
+    model = load_model()
+    
+    # Get latest date
+    latest_date = df['date'].max()
+    logger.info(f"Generating predictions for {latest_date}")
+    
+    # Filter to latest date and predict
+    day_df = df[df['date'] == latest_date].copy()
+    day_df = model.predict(day_df)
+    
+    # Select top 10 with sector diversification
+    top10 = model.select_top10(day_df, max_per_sector=MAX_STOCKS_PER_SECTOR)
+    
+    # Save predictions
+    top10.to_parquet(output_file, index=False)
+    logger.info(f"Saved {len(top10)} predictions to {output_file}")
+    
+    return top10
+
+
 if __name__ == "__main__":
     import argparse
     
