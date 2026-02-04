@@ -88,10 +88,11 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # Add updated files
-          git add data/*.parquet
-          git add outputs/*.parquet outputs/*.json outputs/*.txt
-          git add models/*.pkl models/*.txt
+          # Add updated files (ignore errors for files in .gitignore)
+          git add data/*.parquet 2>/dev/null || true
+          git add features/*.parquet 2>/dev/null || true
+          git add outputs/*.parquet outputs/*.json outputs/*.txt 2>/dev/null || true
+          git add models/*.pkl models/*.txt 2>/dev/null || true
           
           # Check if there are changes
           if git diff --staged --quiet; then
