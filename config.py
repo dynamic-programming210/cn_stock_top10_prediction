@@ -98,6 +98,33 @@ FEATURE_COLS = [
     'amplitude_sector_rel', 'turnover_surge_sector_rel',
     'vs_sector_ret_5', 'vs_sector_volume',
     'sector_ret_rank', 'sector_vol_rank',
+    
+    # ===== STRONG STOCK (强势股) FEATURES =====
+    # Capital flow & sentiment signals
+    'volume_expansion', 'is_volume_2x', 'is_volume_3x',
+    'volume_2x_count_5', 'limit_up_with_volume',
+    'gap_up_size', 'strong_gap_up', 'gap_up_count_10',
+    
+    # Technical pattern confirmation
+    'consec_bullish', 'bullish_days_5',
+    'is_new_high_5', 'is_new_high_10', 'is_new_high_20',
+    'new_high_count_10',
+    
+    # Trend quality & MA alignment (均线多头排列)
+    'ma_bullish_align', 'above_all_ma', 'holding_ma10',
+    'ma5_rising', 'ma10_rising', 'trend_score',
+    
+    # Volume-price health (涨放量、跌缩量)
+    'vol_on_up', 'vol_on_down', 'vol_price_health',
+    'close_position_5d',
+    
+    # Market behavior & relative strength (强于大盘)
+    'vs_market_1d', 'vs_market_5d',
+    'beat_market_count_10',
+    'drawdown_20d', 'resilience',
+    
+    # Composite score
+    'strong_stock_score',
 ]
 
 # Target column
@@ -108,7 +135,7 @@ TARGET_COL = 'fwd_ret_5'  # 5-day forward return
 MAX_STOCKS_PER_SECTOR = 2
 
 # ============ Model Settings ============
-CURRENT_MODEL_VERSION = "cn-v1.1.0"  # Updated for sector features
+CURRENT_MODEL_VERSION = "cn-v2.0.0"  # Updated for strong stock features
 
 # LightGBM Ranker params
 RANKER_PARAMS = {

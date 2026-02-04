@@ -226,6 +226,212 @@ def compute_china_specific_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def compute_strong_stock_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute "Strong Stock" (强势股) features based on institutional trading patterns.
+    
+    These features capture:
+    A. Capital Flow & Sentiment (institutional intent)
+    B. Technical Pattern Confirmation  
+    C. Trend Quality & Momentum
+    D. Volume-Price Health
+    E. Market Behavior & Relative Strength
+    """
+    df = df.copy()
+    
+    # ===== A. CAPITAL FLOW & SENTIMENT =====
+    
+    # A1. Volume expansion (倍量): 2x+ recent average
+    vol_20_avg = df.groupby('symbol')['volume'].transform(
+        lambda x: x.rolling(20, min_periods=5).mean()
+    )
+    df['volume_expansion'] = df['volume'] / (vol_20_avg + 1)
+    df['is_volume_2x'] = (df['volume_expansion'] >= 2.0).astype(int)
+    df['is_volume_3x'] = (df['volume_expansion'] >= 3.0).astype(int)
+    
+    # Sustained volume expansion: 2x+ for multiple days
+    df['volume_2x_count_5'] = df.groupby('symbol')['is_volume_2x'].transform(
+        lambda x: x.rolling(5, min_periods=1).sum()
+    )
+    
+    # A2. Limit-up with volume (涨停放量): strong signal
+    df['limit_up_with_volume'] = (
+        (df['at_limit_up'] == 1) & (df['volume_expansion'] >= 1.5)
+    ).astype(int)
+    
+    # A3. Upward gap (向上跳空缺口): gap that persists
+    prev_high = df.groupby('symbol')['high'].shift(1)
+    df['gap_up_size'] = (df['low'] - prev_high) / (prev_high + 0.01)
+    df['strong_gap_up'] = (df['gap_up_size'] > 0.02).astype(int)  # >2% gap
+    
+    # Gap-up count in recent days
+    df['gap_up_count_10'] = df.groupby('symbol')['strong_gap_up'].transform(
+        lambda x: x.rolling(10, min_periods=1).sum()
+    )
+    
+    # ===== B. TECHNICAL PATTERN CONFIRMATION =====
+    
+    # B1. Consecutive bullish candles (连阳)
+    df['is_bullish_day'] = (df['close'] > df['open']).astype(int)
+    
+    # Count consecutive bullish days
+    df['consec_bullish'] = df.groupby('symbol')['is_bullish_day'].transform(
+        lambda x: x * (x.groupby((x != x.shift()).cumsum()).cumcount() + 1)
+    )
+    
+    # Bullish days in last 5
+    df['bullish_days_5'] = df.groupby('symbol')['is_bullish_day'].transform(
+        lambda x: x.rolling(5, min_periods=1).sum()
+    )
+    
+    # B2. Higher highs pattern (创新高)
+    high_5 = df.groupby('symbol')['high'].transform(lambda x: x.rolling(5).max())
+    high_10 = df.groupby('symbol')['high'].transform(lambda x: x.rolling(10).max())
+    high_20 = df.groupby('symbol')['high'].transform(lambda x: x.rolling(20).max())
+    
+    df['is_new_high_5'] = (df['high'] >= high_5.shift(1)).astype(int)
+    df['is_new_high_10'] = (df['high'] >= high_10.shift(1)).astype(int)
+    df['is_new_high_20'] = (df['high'] >= high_20.shift(1)).astype(int)
+    
+    # Count of new highs in last 10 days
+    df['new_high_count_10'] = df.groupby('symbol')['is_new_high_5'].transform(
+        lambda x: x.rolling(10, min_periods=1).sum()
+    )
+    
+    # ===== C. TREND QUALITY & MA ALIGNMENT (均线多头排列) =====
+    
+    # Moving averages
+    ma5 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(5).mean())
+    ma10 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(10).mean())
+    ma20 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(20).mean())
+    ma60 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(60, min_periods=30).mean())
+    
+    # MA alignment score: 5 > 10 > 20 > 60 (bullish alignment)
+    df['ma_bullish_align'] = (
+        (ma5 > ma10).astype(int) + 
+        (ma10 > ma20).astype(int) + 
+        (ma20 > ma60).astype(int)
+    )  # Score 0-3
+    
+    # Price above all short-term MAs
+    df['above_all_ma'] = (
+        (df['close'] > ma5) & 
+        (df['close'] > ma10) & 
+        (df['close'] > ma20)
+    ).astype(int)
+    
+    # Price holding key MA (not breaking 10MA on pullback)
+    df['holding_ma10'] = (df['low'] > ma10 * 0.98).astype(int)  # Within 2%
+    
+    # MA slope (trending up)
+    ma5_slope = ma5 - ma5.shift(3)
+    ma10_slope = ma10 - ma10.shift(5)
+    df['ma5_rising'] = (ma5_slope > 0).astype(int)
+    df['ma10_rising'] = (ma10_slope > 0).astype(int)
+    
+    # Combined trend score
+    df['trend_score'] = (
+        df['ma_bullish_align'] + 
+        df['above_all_ma'] * 2 + 
+        df['ma5_rising'] + 
+        df['ma10_rising']
+    )  # Score 0-7
+    
+    # ===== D. VOLUME-PRICE HEALTH =====
+    
+    # D1. Volume expands on up days, contracts on down days (涨放量、跌缩量)
+    df['daily_ret_temp'] = df.groupby('symbol')['close'].pct_change(1)
+    df['is_up_day'] = (df['daily_ret_temp'] > 0).astype(int)
+    df['is_down_day'] = (df['daily_ret_temp'] < 0).astype(int)
+    
+    # Volume on up vs down days (rolling 10-day)
+    df['vol_on_up'] = df.groupby('symbol').apply(
+        lambda x: (x['volume'] * x['is_up_day']).rolling(10, min_periods=3).sum() / 
+                  (x['is_up_day'].rolling(10, min_periods=3).sum() + 0.01)
+    ).reset_index(level=0, drop=True)
+    
+    df['vol_on_down'] = df.groupby('symbol').apply(
+        lambda x: (x['volume'] * x['is_down_day']).rolling(10, min_periods=3).sum() / 
+                  (x['is_down_day'].rolling(10, min_periods=3).sum() + 0.01)
+    ).reset_index(level=0, drop=True)
+    
+    # Volume-price health: up-volume > down-volume is healthy
+    df['vol_price_health'] = df['vol_on_up'] / (df['vol_on_down'] + 1)
+    df['vol_price_health'] = df['vol_price_health'].clip(0.1, 10)  # Bound outliers
+    
+    # D2. Price action quality: close near high of day (buying pressure)
+    df['close_near_high'] = (
+        (df['close'] - df['low']) / (df['high'] - df['low'] + 0.01)
+    )  # 1 = closed at high, 0 = closed at low
+    
+    # Average close position over 5 days
+    df['close_position_5d'] = df.groupby('symbol')['close_near_high'].transform(
+        lambda x: x.rolling(5, min_periods=1).mean()
+    )
+    
+    # ===== E. MARKET BEHAVIOR & RELATIVE STRENGTH =====
+    
+    # E1. Market-relative performance (强于大盘)
+    # Compute market average return each day
+    df['market_ret_1'] = df.groupby('date')['daily_ret_temp'].transform('mean')
+    df['market_ret_5'] = df.groupby('date')['ret_5'].transform('mean')
+    
+    # Stock vs market
+    df['vs_market_1d'] = df['daily_ret_temp'] - df['market_ret_1']
+    df['vs_market_5d'] = df['ret_5'] - df['market_ret_5']
+    
+    # Outperformance count: days beating market in last 10
+    df['beat_market'] = (df['vs_market_1d'] > 0).astype(int)
+    df['beat_market_count_10'] = df.groupby('symbol')['beat_market'].transform(
+        lambda x: x.rolling(10, min_periods=1).sum()
+    )
+    
+    # E2. Resilience: smaller drawdown during market pullback (抗跌)
+    # Rolling max price and drawdown
+    rolling_max = df.groupby('symbol')['close'].transform(
+        lambda x: x.rolling(20, min_periods=5).max()
+    )
+    df['drawdown_20d'] = (df['close'] - rolling_max) / (rolling_max + 0.01)
+    
+    # Market average drawdown
+    df['market_drawdown'] = df.groupby('date')['drawdown_20d'].transform('mean')
+    
+    # Resilience score: less drawdown than market = more resilient
+    df['resilience'] = df['drawdown_20d'] - df['market_drawdown']  # Higher = more resilient
+    
+    # ===== F. COMPOSITE STRONG STOCK SCORE =====
+    
+    # Combine key signals into a single score
+    df['strong_stock_score'] = (
+        # Capital flow signals (weight: 3)
+        df['is_volume_2x'] * 1.0 +
+        df['limit_up_count_10'].clip(0, 3) * 0.5 +
+        df['strong_gap_up'] * 1.5 +
+        
+        # Technical patterns (weight: 3)
+        df['consec_bullish'].clip(0, 5) * 0.5 +
+        df['is_new_high_20'] * 1.5 +
+        
+        # Trend quality (weight: 4)
+        df['trend_score'] * 0.5 +
+        
+        # Volume-price health (weight: 2)
+        (df['vol_price_health'] > 1.2).astype(int) * 1.0 +
+        df['close_position_5d'] * 1.0 +
+        
+        # Market outperformance (weight: 3)
+        df['beat_market_count_10'] * 0.2 +
+        (df['resilience'] > 0).astype(int) * 1.5
+    )
+    
+    # Clean up temp columns
+    df = df.drop(columns=['daily_ret_temp', 'is_up_day', 'is_down_day', 
+                          'market_ret_1', 'market_ret_5', 'beat_market',
+                          'is_bullish_day', 'close_near_high'], errors='ignore')
+    
+    return df
+
+
 def compute_sector_relative_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compute sector-relative features to compare stocks within their sector.
@@ -361,6 +567,9 @@ def build_features(bars: pd.DataFrame = None,
     
     logger.info("Computing China-specific features...")
     df = compute_china_specific_features(df)
+    
+    logger.info("Computing strong stock features (强势股)...")
+    df = compute_strong_stock_features(df)
     
     logger.info("Computing rank features...")
     df = compute_rank_features(df)
