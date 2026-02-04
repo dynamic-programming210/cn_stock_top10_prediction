@@ -24,6 +24,9 @@ on:
 env:
   EODHD_API_TOKEN: ${{ secrets.EODHD_API_TOKEN }}
 
+permissions:
+  contents: write  # Allow pushing commits
+
 jobs:
   update-predictions:
     runs-on: ubuntu-latest
