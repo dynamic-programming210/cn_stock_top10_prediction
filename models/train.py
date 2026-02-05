@@ -35,8 +35,14 @@ class TwoStageModel:
         self.regressor = None
         self.feature_cols = None
         
-    def _prepare_ranking_data(self, df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
-        """Prepare data for RandomForest ranker"""
+    def _prepare_ranking_data(self, df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Prepare data for RandomForest ranker with sample weights
+        
+        Returns:
+            X: Features
+            y: Relevance labels (0-4 quintiles)
+            sample_weights: Higher weights for stocks with trend initiation signals
+        """
         # Create relevance labels based on forward returns
         # Group stocks into quintiles by date
         df = df.copy()
@@ -48,7 +54,37 @@ class TwoStageModel:
         X = df[self.feature_cols].values
         y = df['relevance'].values
         
-        return X, y
+        # Create sample weights - give higher weight to samples with trend initiation signals
+        # This helps the model learn these patterns better
+        sample_weights = np.ones(len(df))
+        
+        # Boost weight for stocks with trend initiation signals
+        if 'trend_initiation_score' in df.columns:
+            # High trend initiation score gets 2x weight
+            high_ti = df['trend_initiation_score'] > df['trend_initiation_score'].quantile(0.8)
+            sample_weights[high_ti.values] *= 2.0
+        
+        # Boost weight for golden cross signals
+        if 'golden_cross_10_60' in df.columns:
+            gc_signal = df['golden_cross_10_60'] == 1
+            sample_weights[gc_signal.values] *= 1.5
+        
+        # Boost weight for breakout signals
+        if 'breakout_with_volume' in df.columns:
+            breakout = df['breakout_with_volume'] == 1
+            sample_weights[breakout.values] *= 1.5
+        
+        # Boost weight for reversal patterns
+        if 'reversal_pattern' in df.columns:
+            reversal = df['reversal_pattern'] == 1
+            sample_weights[reversal.values] *= 1.3
+        
+        # Boost weight for strong stocks with positive outcomes (reinforce good signals)
+        if 'strong_stock_score' in df.columns:
+            strong_positive = (df['strong_stock_score'] > df['strong_stock_score'].quantile(0.8)) & (df[TARGET_COL] > 0)
+            sample_weights[strong_positive.values] *= 1.5
+        
+        return X, y, sample_weights
     
     def train(self, df: pd.DataFrame, 
               feature_cols: List[str] = None,
@@ -105,8 +141,11 @@ class TwoStageModel:
         # Stage 1: Train Ranker (RandomForest Classifier)
         logger.info("Training Stage 1: RandomForest Ranker...")
         
-        X_train, y_train = self._prepare_ranking_data(train_df)
-        X_val, y_val = self._prepare_ranking_data(val_df)
+        X_train, y_train, train_weights = self._prepare_ranking_data(train_df)
+        X_val, y_val, _ = self._prepare_ranking_data(val_df)
+        
+        logger.info(f"Sample weights - Mean: {train_weights.mean():.2f}, Max: {train_weights.max():.2f}, "
+                    f"Boosted samples: {(train_weights > 1).sum()} ({100*(train_weights > 1).mean():.1f}%)")
         
         self.ranker = RandomForestClassifier(
             n_estimators=rf_n_estimators,
@@ -115,7 +154,7 @@ class TwoStageModel:
             n_jobs=-1,
             random_state=42
         )
-        self.ranker.fit(X_train, y_train)
+        self.ranker.fit(X_train, y_train, sample_weight=train_weights)
         
         train_acc = self.ranker.score(X_train, y_train)
         val_acc = self.ranker.score(X_val, y_val)
@@ -134,6 +173,7 @@ class TwoStageModel:
             self.regressor.fit(
                 X_reg_train, y_reg_train,
                 eval_set=[(X_reg_val, y_reg_val)],
+                sample_weight=train_weights,
                 verbose=False
             )
         else:
@@ -143,7 +183,7 @@ class TwoStageModel:
                 learning_rate=0.05,
                 random_state=42
             )
-            self.regressor.fit(X_reg_train, y_reg_train)
+            self.regressor.fit(X_reg_train, y_reg_train, sample_weight=train_weights)
         
         # Evaluate
         metrics = self._evaluate(val_df)

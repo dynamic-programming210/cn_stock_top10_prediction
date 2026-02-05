@@ -125,6 +125,34 @@ FEATURE_COLS = [
     
     # Composite score
     'strong_stock_score',
+    
+    # ===== TREND INITIATION (趋势起始) FEATURES =====
+    # Volume expansion after consolidation
+    'vol_healthy_expansion', 'vol_breakout_signal', 'vol_trending_up',
+    
+    # Golden cross signals (bullish MA crossover)
+    'golden_cross_5_20', 'golden_cross_10_60', 'golden_cross_5_10',
+    'golden_cross_any', 'golden_cross_5d',
+    'crossed_above_ma20', 'crossed_above_ma60',
+    
+    # Breakout signals
+    'was_in_consolidation', 'breakout_20d', 'breakout_with_volume',
+    'consolidation_breakout', 'near_52w_high', 'breakout_52w',
+    'was_lower_highs', 'resistance_breakout',
+    
+    # Gap-up signals
+    'has_gap_up', 'gap_up_pct', 'gap_held_5d', 'significant_gap_up',
+    
+    # Higher lows pattern
+    'is_swing_low', 'higher_low', 'higher_low_count_20',
+    'consecutive_higher_lows', 'recent_vs_older_low',
+    
+    # Candlestick reversal patterns
+    'morning_star', 'bullish_engulfing', 'hammer', 'piercing_pattern',
+    'reversal_pattern', 'reversal_count_10',
+    
+    # Composite trend initiation score
+    'trend_initiation_score',
 ]
 
 # Target column
@@ -135,7 +163,19 @@ TARGET_COL = 'fwd_ret_5'  # 5-day forward return
 MAX_STOCKS_PER_SECTOR = 2
 
 # ============ Model Settings ============
-CURRENT_MODEL_VERSION = "cn-v2.0.0"  # Updated for strong stock features
+CURRENT_MODEL_VERSION = "cn-v2.1.0"  # Updated for trend initiation features
+
+# High-weight features (trend initiation signals get boosted)
+HIGH_WEIGHT_FEATURES = [
+    # Trend initiation signals (highest priority)
+    'trend_initiation_score', 'golden_cross_10_60', 'golden_cross_5_20',
+    'breakout_with_volume', 'consolidation_breakout', 'vol_breakout_signal',
+    'morning_star', 'bullish_engulfing', 'higher_low_count_20',
+    'gap_held_5d', 'crossed_above_ma60',
+    # Strong stock signals
+    'strong_stock_score', 'trend_score', 'ma_bullish_align',
+    'vol_price_health', 'resilience',
+]
 
 # LightGBM Ranker params
 RANKER_PARAMS = {
