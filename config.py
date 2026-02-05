@@ -153,6 +153,13 @@ FEATURE_COLS = [
     
     # Composite trend initiation score
     'trend_initiation_score',
+    
+    # ===== NEWS SENTIMENT (新闻舆情) FEATURES =====
+    # News activity
+    'news_news_count',
+    # Sentiment scores
+    'news_sentiment_mean', 'news_sentiment_std',
+    'news_sentiment_positive_ratio', 'news_sentiment_trend',
 ]
 
 # Target column
@@ -163,7 +170,7 @@ TARGET_COL = 'fwd_ret_5'  # 5-day forward return
 MAX_STOCKS_PER_SECTOR = 2
 
 # ============ Model Settings ============
-CURRENT_MODEL_VERSION = "cn-v2.1.0"  # Updated for trend initiation features
+CURRENT_MODEL_VERSION = "cn-v2.2.0"  # Updated for news sentiment features
 
 # High-weight features (trend initiation signals get boosted)
 HIGH_WEIGHT_FEATURES = [
@@ -172,6 +179,8 @@ HIGH_WEIGHT_FEATURES = [
     'breakout_with_volume', 'consolidation_breakout', 'vol_breakout_signal',
     'morning_star', 'bullish_engulfing', 'higher_low_count_20',
     'gap_held_5d', 'crossed_above_ma60',
+    # News sentiment (can be early signals)
+    'news_sentiment_mean', 'news_sentiment_trend',
     # Strong stock signals
     'strong_stock_score', 'trend_score', 'ma_bullish_align',
     'vol_price_health', 'resilience',

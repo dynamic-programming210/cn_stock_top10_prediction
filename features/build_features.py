@@ -578,6 +578,17 @@ def build_features(bars: pd.DataFrame = None,
     logger.info("Computing sector-relative features...")
     df = compute_sector_relative_features(df)
     
+    # NEW: Add news sentiment features (v2.2)
+    try:
+        logger.info("Adding news sentiment features...")
+        from data.fetch_news import get_news_features
+        df = get_news_features(df)
+        news_cols = [c for c in df.columns if c.startswith('news_')]
+        logger.info(f"Added {len(news_cols)} news sentiment features")
+    except Exception as e:
+        logger.warning(f"Could not add news features: {e}")
+        logger.warning("Continuing without news features...")
+    
     # Save raw features
     if save:
         df.to_parquet(FEATURES_FILE, index=False)

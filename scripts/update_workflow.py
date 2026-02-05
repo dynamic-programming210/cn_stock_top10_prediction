@@ -1,4 +1,9 @@
-name: Update Stock Predictions
+#!/usr/bin/env python3
+"""Script to update the GitHub Actions workflow file with news sentiment fetching."""
+
+import os
+
+workflow_content = '''name: Update Stock Predictions
 
 on:
   # Manual trigger with options
@@ -134,6 +139,17 @@ jobs:
           echo "## 🎉 Update Complete!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Latest Top-10 Predictions" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "\\`\\`\\`" >> $GITHUB_STEP_SUMMARY
           python show_predictions.py >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "\\`\\`\\`" >> $GITHUB_STEP_SUMMARY
+'''
+
+if __name__ == "__main__":
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_dir = os.path.dirname(script_dir)
+    workflow_path = os.path.join(project_dir, '.github', 'workflows', 'update_predictions.yml')
+    
+    with open(workflow_path, 'w') as f:
+        f.write(workflow_content)
+    
+    print(f"✅ Updated workflow file: {workflow_path}")
