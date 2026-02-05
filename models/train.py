@@ -424,7 +424,7 @@ def load_model() -> TwoStageModel:
 
 def generate_predictions(features_file: str = None, output_file: str = None):
     """Generate top-10 predictions for the latest date"""
-    from config import FEATURES_Z_FILE, TOP10_LATEST_FILE, MAX_STOCKS_PER_SECTOR
+    from config import FEATURES_Z_FILE, TOP10_LATEST_FILE, TOP10_HISTORY_FILE, MAX_STOCKS_PER_SECTOR
     from data.sectors import get_stock_sector
     
     features_file = features_file or FEATURES_Z_FILE
@@ -455,6 +455,61 @@ def generate_predictions(features_file: str = None, output_file: str = None):
     # Save predictions
     top10.to_parquet(output_file, index=False)
     logger.info(f"Saved {len(top10)} predictions to {output_file}")
+    
+    # Update history
+    logger.info("Updating prediction history...")
+    if TOP10_HISTORY_FILE.exists():
+        history = pd.read_parquet(TOP10_HISTORY_FILE)
+        history['date'] = pd.to_datetime(history['date'])
+        # Remove existing entries for this date
+        history = history[history['date'] != latest_date]
+        history = pd.concat([history, top10], ignore_index=True)
+    else:
+        history = top10
+    history = history.sort_values('date', ascending=False)
+    history.to_parquet(TOP10_HISTORY_FILE, index=False)
+    logger.info(f"Updated history: {history['date'].nunique()} dates")
+    
+    # Update quality report
+    _update_quality_report()
+    
+    return top10
+
+
+def _update_quality_report():
+    """Update the quality report with latest data"""
+    from config import BARS_FILE, FEATURES_Z_FILE, QUALITY_REPORT_FILE
+    import json
+    from datetime import datetime
+    
+    try:
+        bars = pd.read_parquet(BARS_FILE)
+        features = pd.read_parquet(FEATURES_Z_FILE)
+        
+        report = {
+            'generated_at': datetime.now().isoformat(),
+            'asof_date': str(bars['date'].max().date()),
+            'data': {
+                'total_bars': int(len(bars)),
+                'unique_symbols': int(bars['symbol'].nunique()),
+                'date_range': f"{bars['date'].min().date()} to {bars['date'].max().date()}",
+                'exchanges': bars['exchange'].unique().tolist()
+            },
+            'features': {
+                'total_rows': int(len(features)),
+                'unique_symbols': int(features['symbol'].nunique())
+            },
+            'coverage': {
+                'asof_date_rate': float(len(bars[bars['date'] == bars['date'].max()]) / bars['symbol'].nunique())
+            }
+        }
+        
+        with open(QUALITY_REPORT_FILE, 'w') as f:
+            json.dump(report, f, indent=2)
+        
+        logger.info(f"Updated quality report: asof_date = {report['asof_date']}")
+    except Exception as e:
+        logger.warning(f"Could not update quality report: {e}")
     
     return top10
 

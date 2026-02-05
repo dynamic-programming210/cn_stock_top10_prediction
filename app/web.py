@@ -95,12 +95,25 @@ def get_stock_link(symbol: str, exchange: str) -> str:
 
 @st.cache_data(ttl=300)
 def load_history():
-    """Load historical top-10 predictions"""
+    """Load historical top-10 predictions, including latest if not in history"""
+    history_df = pd.DataFrame()
+    
     if TOP10_HISTORY_FILE.exists():
-        df = pd.read_parquet(TOP10_HISTORY_FILE)
-        df['date'] = pd.to_datetime(df['date'])
-        return df
-    return pd.DataFrame()
+        history_df = pd.read_parquet(TOP10_HISTORY_FILE)
+        history_df['date'] = pd.to_datetime(history_df['date'])
+    
+    # Also check if latest predictions should be merged into history
+    if TOP10_LATEST_FILE.exists():
+        latest_df = pd.read_parquet(TOP10_LATEST_FILE)
+        latest_df['date'] = pd.to_datetime(latest_df['date'])
+        latest_date = latest_df['date'].iloc[0]
+        
+        # If latest date is not in history, add it
+        if history_df.empty or latest_date not in history_df['date'].values:
+            history_df = pd.concat([history_df, latest_df], ignore_index=True)
+            history_df = history_df.drop_duplicates(subset=['symbol', 'date'], keep='last')
+    
+    return history_df
 
 
 @st.cache_data(ttl=3600)
@@ -282,9 +295,16 @@ def main():
     # Sidebar
     st.sidebar.header("📊 数据状态 (Data Status)")
     
+    # Show prediction date from latest predictions (most reliable source)
+    if not latest_df.empty:
+        pred_date = latest_df['date'].iloc[0]
+        st.sidebar.metric("预测日期", pred_date.strftime('%Y-%m-%d'))
+    
     if quality_report:
         asof_date = quality_report.get('asof_date', 'Unknown')
-        st.sidebar.metric("数据日期", asof_date)
+        # Only show data date if different from prediction date
+        if latest_df.empty or str(asof_date) != pred_date.strftime('%Y-%m-%d'):
+            st.sidebar.metric("数据日期", asof_date)
         
         if 'data' in quality_report:
             st.sidebar.metric("股票数量", quality_report['data'].get('unique_symbols', 'N/A'))
