@@ -366,7 +366,7 @@ def main():
             
             # Main table with confidence intervals and sector
             display_cols = ['symbol', 'name', 'sector_cn', 'exchange', 'close', 'pred_ret_5', 'pred_lower', 'pred_upper', 
-                          'confidence_score', 'pred_price_5d', 'reason_human']
+                          'confidence_score', 'pred_price_5d', 'reason_cn']
             display_df = latest_df[[c for c in display_cols if c in latest_df.columns]].copy()
             
             # Add chart links
@@ -405,7 +405,7 @@ def main():
                 'pred_upper': '上限(90%)',
                 'confidence_score': '置信度',
                 'pred_price_5d': '目标价格',
-                'reason_human': '选股理由',
+                'reason_cn': '选股理由',
                 'chart_link': '📈 行情'
             })
             
@@ -514,7 +514,7 @@ def main():
                 else:
                     st.subheader(f"{selected_date.strftime('%Y-%m-%d')} Top-10")
                     
-                    display_cols = ['symbol', 'exchange', 'close', 'pred_ret_5', 'pred_price_5d', 'reason_human']
+                    display_cols = ['symbol', 'exchange', 'close', 'pred_ret_5', 'pred_price_5d', 'reason_cn']
                     display_df = date_df[[c for c in display_cols if c in date_df.columns]].copy()
                     
                     if 'exchange' in display_df.columns:
@@ -532,7 +532,7 @@ def main():
                         'close': '当时价格',
                         'pred_ret_5': '预测收益',
                         'pred_price_5d': '目标价格',
-                        'reason_human': '选股理由'
+                        'reason_cn': '选股理由'
                     })
                     
                     st.dataframe(display_df, use_container_width=True, hide_index=True)

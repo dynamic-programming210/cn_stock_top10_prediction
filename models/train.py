@@ -452,6 +452,15 @@ def generate_predictions(features_file: str = None, output_file: str = None):
     # Select top 10 with sector diversification
     top10 = model.select_top10(day_df, max_per_sector=MAX_STOCKS_PER_SECTOR)
     
+    # Add Chinese selection reasons
+    logger.info("Adding selection reasons...")
+    try:
+        from models.selection_reasons import add_selection_reasons
+        top10 = add_selection_reasons(top10, include_news=True)
+    except Exception as e:
+        logger.warning(f"Could not add selection reasons: {e}")
+        top10['reason_cn'] = '模型预测入选'
+    
     # Save predictions
     top10.to_parquet(output_file, index=False)
     logger.info(f"Saved {len(top10)} predictions to {output_file}")
@@ -510,8 +519,6 @@ def _update_quality_report():
         logger.info(f"Updated quality report: asof_date = {report['asof_date']}")
     except Exception as e:
         logger.warning(f"Could not update quality report: {e}")
-    
-    return top10
 
 
 if __name__ == "__main__":
