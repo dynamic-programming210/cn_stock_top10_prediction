@@ -33,56 +33,331 @@ permissions:
   contents: write  # Allow pushing commits
 
 jobs:
-  update-predictions:
+  # ==========================================================
+  # Job 1: Fetch stock data (can be parallelized by exchange)
+  # ==========================================================
+  fetch-data-shg:
     runs-on: ubuntu-latest
-    timeout-minutes: 240  # 4 hours for full data refresh + training
-    
+    timeout-minutes: 120
+    if: ${{ github.event.inputs.full_refresh == 'true' }}
+    outputs:
+      has_data: ${{ steps.fetch.outputs.has_data }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      
+      - name: Fetch Shanghai (SHG) data
+        id: fetch
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from data.fetch_eodhd import EODHDClient, fetch_universe, fetch_historical_bars
+          import pandas as pd
+          from datetime import datetime, timedelta
+          from config import LOOKBACK_DAYS
+          
+          client = EODHDClient()
+          
+          # Fetch only SHG symbols
+          universe = client.get_exchange_symbols('SHG', 'common_stock')
+          universe = universe[universe['type'] == 'Common Stock'].copy() if 'type' in universe.columns else universe
+          
+          # Filter main board
+          universe = universe[universe['symbol'].str.startswith(('600', '601', '603', '605'))].copy()
+          print(f'SHG universe: {len(universe)} symbols')
+          
+          # Fetch bars
+          from_date = (datetime.now() - timedelta(days=LOOKBACK_DAYS)).strftime('%Y-%m-%d')
+          to_date = datetime.now().strftime('%Y-%m-%d')
+          
+          all_bars = []
+          for i, (_, row) in enumerate(universe.iterrows()):
+              df = client.get_eod_data(row['symbol'], 'SHG', from_date, to_date)
+              if not df.empty:
+                  all_bars.append(df)
+              if (i + 1) % 100 == 0:
+                  print(f'Progress: {i+1}/{len(universe)}')
+          
+          if all_bars:
+              bars = pd.concat(all_bars, ignore_index=True)
+              bars.to_parquet('shg_bars.parquet', index=False)
+              print(f'Saved {len(bars)} bars for SHG')
+          "
+          echo "has_data=true" >> $GITHUB_OUTPUT
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shg-data
+          path: shg_bars.parquet
+          retention-days: 1
+
+  fetch-data-she:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    if: ${{ github.event.inputs.full_refresh == 'true' }}
+    outputs:
+      has_data: ${{ steps.fetch.outputs.has_data }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      
+      - name: Fetch Shenzhen (SHE) data
+        id: fetch
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from data.fetch_eodhd import EODHDClient
+          import pandas as pd
+          from datetime import datetime, timedelta
+          from config import LOOKBACK_DAYS
+          
+          client = EODHDClient()
+          
+          # Fetch only SHE symbols
+          universe = client.get_exchange_symbols('SHE', 'common_stock')
+          universe = universe[universe['type'] == 'Common Stock'].copy() if 'type' in universe.columns else universe
+          
+          # Filter main board
+          universe = universe[universe['symbol'].str.startswith(('000', '001', '002'))].copy()
+          print(f'SHE universe: {len(universe)} symbols')
+          
+          # Fetch bars
+          from_date = (datetime.now() - timedelta(days=LOOKBACK_DAYS)).strftime('%Y-%m-%d')
+          to_date = datetime.now().strftime('%Y-%m-%d')
+          
+          all_bars = []
+          for i, (_, row) in enumerate(universe.iterrows()):
+              df = client.get_eod_data(row['symbol'], 'SHE', from_date, to_date)
+              if not df.empty:
+                  all_bars.append(df)
+              if (i + 1) % 100 == 0:
+                  print(f'Progress: {i+1}/{len(universe)}')
+          
+          if all_bars:
+              bars = pd.concat(all_bars, ignore_index=True)
+              bars.to_parquet('she_bars.parquet', index=False)
+              print(f'Saved {len(bars)} bars for SHE')
+          "
+          echo "has_data=true" >> $GITHUB_OUTPUT
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: she-data
+          path: she_bars.parquet
+          retention-days: 1
+
+  # ==========================================================
+  # Job 2: Merge data (runs after parallel fetch completes)
+  # ==========================================================
+  merge-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [fetch-data-shg, fetch-data-she]
+    if: ${{ always() && github.event.inputs.full_refresh == 'true' && (needs.fetch-data-shg.result == 'success' || needs.fetch-data-she.result == 'success') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Merge exchange data
+        run: |
+          python -c "
+          import pandas as pd
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, '.')
+          from config import BARS_FILE, UNIVERSE_FILE, UNIVERSE_META_FILE
+          from data.fetch_eodhd import filter_liquid_stocks
+          
+          # Load and merge data from both exchanges
+          all_bars = []
+          for f in Path('artifacts').glob('**/she_bars.parquet'):
+              all_bars.append(pd.read_parquet(f))
+          for f in Path('artifacts').glob('**/shg_bars.parquet'):
+              all_bars.append(pd.read_parquet(f))
+          
+          if all_bars:
+              bars = pd.concat(all_bars, ignore_index=True)
+              bars = bars.drop_duplicates(subset=['symbol', 'date'], keep='last')
+              bars = bars.sort_values(['symbol', 'date']).reset_index(drop=True)
+              
+              print(f'Total bars before filtering: {len(bars)}')
+              bars = filter_liquid_stocks(bars)
+              print(f'Total bars after filtering: {len(bars)}')
+              
+              bars.to_parquet(BARS_FILE, index=False)
+              print(f'Saved merged bars to {BARS_FILE}')
+              
+              # Create universe file
+              universe = bars[['symbol', 'exchange']].drop_duplicates()
+              universe.to_parquet(UNIVERSE_FILE, index=False)
+              print(f'Saved {len(universe)} symbols to {UNIVERSE_FILE}')
+          "
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: merged-data
+          path: |
+            data/bars.parquet
+            data/universe.parquet
+          retention-days: 1
+
+  # ==========================================================
+  # Job 3: Incremental data fetch (when not doing full refresh)
+  # ==========================================================
+  fetch-incremental:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: ${{ github.event.inputs.full_refresh != 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      
+      - name: Fetch incremental data
+        run: python data/fetch_eodhd.py
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: incremental-data
+          path: |
+            data/bars.parquet
+            data/universe.parquet
+            data/universe_meta.parquet
+          retention-days: 1
+
+  # ==========================================================
+  # Job 4: Fetch news in parallel (independent of data fetch)
+  # ==========================================================
+  fetch-news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    if: ${{ github.event.inputs.fetch_news != 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: |
+          pip install -r requirements.txt
+          pip install snownlp
+      
+      - name: Fetch news sentiment (with timeout)
+        continue-on-error: true
+        timeout-minutes: 80
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          import pandas as pd
+          from pathlib import Path
+          from config import UNIVERSE_FILE
+          from data.fetch_news import fetch_news_sentiment_batch, NEWS_SENTIMENT_FILE
+          
+          # Try to load existing universe, or use a minimal list
+          if Path(UNIVERSE_FILE).exists():
+              universe = pd.read_parquet(UNIVERSE_FILE)
+              symbols = universe['symbol'].tolist()[:500]  # Limit to 500 for speed
+          else:
+              # Use some common large-cap stocks as fallback
+              symbols = ['600519', '601318', '600036', '000858', '002415']
+          
+          print(f'Fetching news for {len(symbols)} symbols...')
+          df = fetch_news_sentiment_batch(symbols, max_workers=5)
+          df['date'] = pd.Timestamp.now().normalize()
+          df.to_parquet(NEWS_SENTIMENT_FILE, index=False)
+          print(f'News sentiment saved for {len(df)} symbols!')
+          "
+      
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: news-data
+          path: data/news_sentiment.parquet
+          retention-days: 1
+
+  # ==========================================================
+  # Job 5: Build features and generate predictions
+  # ==========================================================
+  build-and-predict:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [merge-data, fetch-incremental, fetch-news]
+    if: |
+      always() && 
+      (needs.merge-data.result == 'success' || needs.merge-data.result == 'skipped') &&
+      (needs.fetch-incremental.result == 'success' || needs.fetch-incremental.result == 'skipped')
+    steps:
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
+      - run: |
           pip install -r requirements.txt
-          pip install snownlp  # Chinese NLP for news sentiment
+          pip install snownlp
       
-      - name: Fetch latest stock data
+      # Download data artifacts
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          path: artifacts
+      
+      - name: Merge artifacts into data directory
         run: |
-          echo "📊 Fetching latest stock data..."
-          if [ "${{ github.event.inputs.full_refresh }}" = "true" ]; then
-            python data/fetch_eodhd.py --full-refresh
-          else
-            python data/fetch_eodhd.py
+          # Copy data files from artifacts
+          for f in artifacts/merged-data/*.parquet artifacts/incremental-data/*.parquet; do
+            if [ -f "$f" ]; then
+              cp "$f" data/
+              echo "Copied $f"
+            fi
+          done
+          
+          # Copy news data if available
+          if [ -f artifacts/news-data/news_sentiment.parquet ]; then
+            cp artifacts/news-data/news_sentiment.parquet data/
+            echo "Copied news sentiment data"
           fi
-      
-      - name: Fetch news sentiment
-        if: ${{ github.event.inputs.fetch_news != 'false' }}
-        continue-on-error: true  # Don't fail if news fetching fails
-        run: |
-          echo "📰 Fetching news sentiment data..."
-          python data/fetch_news.py
-          echo "✅ News sentiment data updated!"
+          
+          ls -la data/
       
       - name: Build features
         run: |
-          echo "🔧 Building features (including news sentiment)..."
+          echo "🔧 Building features..."
           python features/build_features.py
       
-      - name: Train model
+      - name: Train model (if requested)
         if: ${{ github.event.inputs.retrain_model == 'true' || github.event_name == 'schedule' }}
         run: |
-          echo "🤖 Training model..."
+          echo "🤖 Training 5-day model..."
           python models/train.py --retrain
+          echo "🤖 Training 15-day model..."
+          python models/train_15d.py --fast
       
       - name: Generate predictions
         run: |
@@ -91,27 +366,30 @@ jobs:
           import sys
           sys.path.insert(0, '.')
           from models.train import generate_predictions
+          from models.train_15d import generate_predictions_15d
+          
           generate_predictions()
-          print('✅ Predictions generated successfully!')
+          print('✅ 5-day predictions generated!')
+          
+          try:
+              generate_predictions_15d()
+              print('✅ 15-day predictions generated!')
+          except Exception as e:
+              print(f'⚠️ 15-day predictions skipped: {e}')
           "
       
       - name: Show latest predictions
-        run: |
-          echo "📋 Latest Top-10 Predictions:"
-          python show_predictions.py
+        run: python show_predictions.py
       
       - name: Commit and push updates
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # Add updated files (ignore errors for files in .gitignore)
           git add data/*.parquet 2>/dev/null || true
-          git add features/*.parquet 2>/dev/null || true
-          git add outputs/*.parquet outputs/*.json outputs/*.txt 2>/dev/null || true
+          git add outputs/*.parquet outputs/*.json 2>/dev/null || true
           git add models/*.pkl models/*.txt 2>/dev/null || true
           
-          # Check if there are changes
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
@@ -120,12 +398,12 @@ jobs:
             echo "✅ Changes committed and pushed!"
           fi
       
-      - name: Upload predictions artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: predictions-${{ github.run_id }}
           path: |
             outputs/top10_latest.parquet
+            outputs/top10_latest_15d.parquet
             outputs/quality_report.json
           retention-days: 30
       
@@ -133,7 +411,7 @@ jobs:
         run: |
           echo "## 🎉 Update Complete!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Latest Top-10 Predictions" >> $GITHUB_STEP_SUMMARY
+          echo "### Latest Top-10 Predictions (5-Day)" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          python show_predictions.py >> $GITHUB_STEP_SUMMARY
+          python show_predictions.py >> $GITHUB_STEP_SUMMARY 2>&1 || echo "No predictions available"
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
