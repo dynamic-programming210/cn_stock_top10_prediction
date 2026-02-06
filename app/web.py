@@ -113,6 +113,13 @@ def load_history():
             history_df = pd.concat([history_df, latest_df], ignore_index=True)
             history_df = history_df.drop_duplicates(subset=['symbol', 'date'], keep='last')
     
+    # Ensure reason_cn column exists and fill missing values
+    if not history_df.empty:
+        if 'reason_cn' not in history_df.columns:
+            history_df['reason_cn'] = None
+        # Fill missing reasons with a default
+        history_df['reason_cn'] = history_df['reason_cn'].fillna('模型预测入选')
+    
     return history_df
 
 
