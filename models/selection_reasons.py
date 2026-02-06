@@ -17,17 +17,21 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def generate_reason_cn(row: pd.Series) -> str:
+def generate_reason_cn(row: pd.Series, horizon: int = 5) -> str:
     """
     Generate a Chinese reason for why this stock was selected
     
     Args:
         row: A row from the predictions DataFrame with all features
+        horizon: Prediction horizon (5 or 15 days)
         
     Returns:
         Chinese string explaining the selection reason
     """
     reasons = []
+    
+    # Horizon-specific text
+    horizon_text = "中短期" if horizon == 15 else "短期"
     
     # 1. Strong momentum
     ret_5 = row.get('ret_5', 0)
@@ -101,29 +105,30 @@ def generate_reason_cn(row: pd.Series) -> str:
     
     # If no specific reasons, use generic
     if not reasons:
-        pred_ret = row.get('pred_ret_5', 0)
+        pred_ret = row.get('pred_ret_5' if horizon == 5 else 'pred_ret_15', 0)
         if pred_ret > 0:
-            reasons.append("综合技术指标看好")
+            reasons.append(f"{horizon_text}走势看好")
         else:
-            reasons.append("模型预测入选")
+            reasons.append(f"模型预测{horizon}日入选")
     
     # Combine reasons (max 3)
     return "，".join(reasons[:3])
 
 
-def generate_reason_with_news(row: pd.Series, news_df: pd.DataFrame = None) -> str:
+def generate_reason_with_news(row: pd.Series, news_df: pd.DataFrame = None, horizon: int = 5) -> str:
     """
     Generate reason including news sentiment if available
     
     Args:
         row: A row from predictions DataFrame
         news_df: News sentiment DataFrame
+        horizon: Prediction horizon (5 or 15 days)
         
     Returns:
         Chinese reason string with news info if available
     """
     # Get base reason from technical indicators
-    base_reason = generate_reason_cn(row)
+    base_reason = generate_reason_cn(row, horizon=horizon)
     
     # Try to add news info
     if news_df is not None and not news_df.empty:
@@ -151,13 +156,14 @@ def generate_reason_with_news(row: pd.Series, news_df: pd.DataFrame = None) -> s
     return base_reason
 
 
-def add_selection_reasons(df: pd.DataFrame, include_news: bool = True) -> pd.DataFrame:
+def add_selection_reasons(df: pd.DataFrame, include_news: bool = True, horizon: int = 5) -> pd.DataFrame:
     """
     Add Chinese selection reasons to predictions DataFrame
     
     Args:
         df: Predictions DataFrame with features
         include_news: Whether to include news sentiment info
+        horizon: Prediction horizon (5 or 15 days)
         
     Returns:
         DataFrame with 'reason_cn' column added
@@ -173,13 +179,13 @@ def add_selection_reasons(df: pd.DataFrame, include_news: bool = True) -> pd.Dat
         except Exception as e:
             logger.warning(f"Could not load news data: {e}")
     
-    # Generate reasons
+    # Generate reasons (horizon-specific)
     if news_df is not None:
-        df['reason_cn'] = df.apply(lambda row: generate_reason_with_news(row, news_df), axis=1)
+        df['reason_cn'] = df.apply(lambda row: generate_reason_with_news(row, news_df, horizon=horizon), axis=1)
     else:
-        df['reason_cn'] = df.apply(generate_reason_cn, axis=1)
+        df['reason_cn'] = df.apply(lambda row: generate_reason_cn(row, horizon=horizon), axis=1)
     
-    logger.info(f"Generated Chinese reasons for {len(df)} stocks")
+    logger.info(f"Generated Chinese reasons for {len(df)} stocks ({horizon}D horizon)")
     
     return df
 

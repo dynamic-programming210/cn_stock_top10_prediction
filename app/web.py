@@ -17,6 +17,10 @@ from config import (
     UNIVERSE_META_FILE, CURRENT_MODEL_VERSION, OUTPUTS_DIR, EXCHANGES
 )
 
+# 15-day prediction files
+TOP10_LATEST_15D_FILE = OUTPUTS_DIR / "top10_latest_15d.parquet"
+TOP10_HISTORY_15D_FILE = OUTPUTS_DIR / "top10_history_15d.parquet"
+
 # Page config - wrapped in try/except for import compatibility
 try:
     st.set_page_config(
@@ -32,9 +36,21 @@ except st.errors.StreamlitAPIException:
 
 @st.cache_data(ttl=300)
 def load_latest_top10():
-    """Load latest top-10 predictions"""
+    """Load latest top-10 predictions (5-day)"""
     if TOP10_LATEST_FILE.exists():
         df = pd.read_parquet(TOP10_LATEST_FILE)
+        df['date'] = pd.to_datetime(df['date'])
+        # Merge with universe to get stock names
+        df = merge_stock_names(df)
+        return df
+    return pd.DataFrame()
+
+
+@st.cache_data(ttl=300)
+def load_latest_top10_15d():
+    """Load latest top-10 predictions (15-day)"""
+    if TOP10_LATEST_15D_FILE.exists():
+        df = pd.read_parquet(TOP10_LATEST_15D_FILE)
         df['date'] = pd.to_datetime(df['date'])
         # Merge with universe to get stock names
         df = merge_stock_names(df)
@@ -95,7 +111,7 @@ def get_stock_link(symbol: str, exchange: str) -> str:
 
 @st.cache_data(ttl=300)
 def load_history():
-    """Load historical top-10 predictions, including latest if not in history"""
+    """Load historical top-10 predictions (5-day), including latest if not in history"""
     history_df = pd.DataFrame()
     
     if TOP10_HISTORY_FILE.exists():
@@ -119,6 +135,35 @@ def load_history():
             history_df['reason_cn'] = None
         # Fill missing reasons with a default
         history_df['reason_cn'] = history_df['reason_cn'].fillna('模型预测入选')
+    
+    return history_df
+
+
+@st.cache_data(ttl=300)
+def load_history_15d():
+    """Load historical top-10 predictions (15-day)"""
+    history_df = pd.DataFrame()
+    
+    if TOP10_HISTORY_15D_FILE.exists():
+        history_df = pd.read_parquet(TOP10_HISTORY_15D_FILE)
+        history_df['date'] = pd.to_datetime(history_df['date'])
+    
+    # Also check if latest predictions should be merged into history
+    if TOP10_LATEST_15D_FILE.exists():
+        latest_df = pd.read_parquet(TOP10_LATEST_15D_FILE)
+        latest_df['date'] = pd.to_datetime(latest_df['date'])
+        latest_date = latest_df['date'].iloc[0]
+        
+        # If latest date is not in history, add it
+        if history_df.empty or latest_date not in history_df['date'].values:
+            history_df = pd.concat([history_df, latest_df], ignore_index=True)
+            history_df = history_df.drop_duplicates(subset=['symbol', 'date'], keep='last')
+    
+    # Ensure reason_cn column exists and fill missing values
+    if not history_df.empty:
+        if 'reason_cn' not in history_df.columns:
+            history_df['reason_cn'] = None
+        history_df['reason_cn'] = history_df['reason_cn'].fillna('模型预测15日入选')
     
     return history_df
 
@@ -187,7 +232,7 @@ def get_exchange_name(code):
 # ============ Chart Functions ============
 
 def render_predictions_chart(df: pd.DataFrame):
-    """Render bar chart of predicted returns with confidence intervals"""
+    """Render bar chart of predicted returns with confidence intervals (5-day)"""
     import plotly.graph_objects as go
     
     df_plot = df.sort_values('pred_ret_5', ascending=True).copy()
@@ -229,6 +274,38 @@ def render_predictions_chart(df: pd.DataFrame):
     
     fig.update_layout(
         title='预测5日收益率 (Predicted 5-Day Returns with 90% CI)',
+        xaxis_title='预测收益率 (%)',
+        yaxis_title='股票代码',
+        height=400,
+        showlegend=True,
+        xaxis=dict(zeroline=True, zerolinecolor='gray', zerolinewidth=1)
+    )
+    
+    return fig
+
+
+def render_predictions_chart_15d(df: pd.DataFrame):
+    """Render bar chart of predicted returns (15-day)"""
+    import plotly.graph_objects as go
+    
+    df_plot = df.sort_values('pred_ret_15', ascending=True).copy()
+    
+    colors = ['#00CC96' if x > 0 else '#EF553B' for x in df_plot['pred_ret_15']]
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        y=df_plot['symbol'],
+        x=df_plot['pred_ret_15'] * 100,
+        orientation='h',
+        marker_color=colors,
+        name='Predicted Return',
+        text=[f"{x*100:.1f}%" for x in df_plot['pred_ret_15']],
+        textposition='outside'
+    ))
+    
+    fig.update_layout(
+        title='预测15日收益率 (Predicted 15-Day Returns)',
         xaxis_title='预测收益率 (%)',
         yaxis_title='股票代码',
         height=400,
@@ -286,16 +363,18 @@ def render_symbol_history_chart(history_df: pd.DataFrame, symbol: str):
 def main():
     # Title
     st.title("🇨🇳 中国A股 Top-10 预测器")
-    st.markdown("*预测未来5个交易日最有可能跑赢大盘的10只股票*")
-    st.markdown("*Predicting the top 10 A-share stocks most likely to outperform over the next 5 trading days*")
+    st.markdown("*预测未来5日和15日最有可能跑赢大盘的10只股票*")
+    st.markdown("*Predicting the top 10 A-share stocks most likely to outperform over the next 5 and 15 trading days*")
     
     # Load data
     latest_df = load_latest_top10()
+    latest_df_15d = load_latest_top10_15d()
     history_df = load_history()
+    history_df_15d = load_history_15d()
     quality_report = load_quality_report()
     universe_meta = load_universe_meta()
     
-    # Add confidence intervals if not present
+    # Add confidence intervals if not present (5-day)
     if not latest_df.empty and 'confidence_score' not in latest_df.columns:
         latest_df = add_confidence_intervals(latest_df)
     
@@ -327,20 +406,21 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.caption(f"模型版本: {CURRENT_MODEL_VERSION}")
     
-    # Main content tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "🏆 最新Top-10", 
+    # Main content tabs - now with 15-day tab
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🏆 5日预测", 
+        "📆 15日预测",
         "📊 图表分析",
         "📅 历史记录", 
         "ℹ️ 关于"
     ])
     
-    # ========== TAB 1: Latest Top-10 ==========
+    # ========== TAB 1: Latest Top-10 (5-Day) ==========
     with tab1:
-        st.header("最新 Top-10 预测 (Latest Top-10 Predictions)")
+        st.header("最新 5日预测 (5-Day Predictions)")
         
         if latest_df.empty:
-            st.warning("暂无预测数据。请先运行更新流程。")
+            st.warning("暂无5日预测数据。请先运行更新流程。")
             st.code("python app/update_daily.py --setup", language="bash")
         else:
             # Display date
@@ -364,8 +444,8 @@ def main():
             avg_confidence = latest_df['confidence_score'].mean() if 'confidence_score' in latest_df.columns else 0.7
             num_sectors = latest_df['sector_cn'].nunique() if 'sector_cn' in latest_df.columns else 0
             
-            col1.metric("平均预测收益", format_percent(avg_pred_ret))
-            col2.metric("最高预测收益", format_percent(max_pred_ret))
+            col1.metric("平均预测收益(5D)", format_percent(avg_pred_ret))
+            col2.metric("最高预测收益(5D)", format_percent(max_pred_ret))
             col3.metric("平均置信度", f"{avg_confidence:.0%}")
             col4.metric("覆盖行业数", f"{num_sectors}")
             
@@ -430,8 +510,92 @@ def main():
                 }
             )
     
-    # ========== TAB 2: Charts & Analysis ==========
+    # ========== TAB 2: Latest Top-10 (15-Day) ==========
     with tab2:
+        st.header("最新 15日预测 (15-Day Predictions)")
+        
+        if latest_df_15d.empty:
+            st.warning("暂无15日预测数据。请先运行更新流程。")
+            st.code("python models/train_15d.py --predict", language="bash")
+        else:
+            # Display date
+            pred_date_15d = latest_df_15d['date'].iloc[0]
+            st.subheader(f"预测日期: {pred_date_15d.strftime('%Y-%m-%d')}")
+            
+            # Add sector info if not present
+            if 'sector_cn' not in latest_df_15d.columns:
+                try:
+                    from data.sectors import get_stock_sector, get_sector_name
+                    latest_df_15d['sector'] = latest_df_15d['symbol'].apply(lambda x: get_stock_sector(str(x)))
+                    latest_df_15d['sector_cn'] = latest_df_15d['sector'].apply(lambda x: get_sector_name(x, chinese=True))
+                except ImportError:
+                    latest_df_15d['sector_cn'] = '其他'
+            
+            # Metrics row
+            col1, col2, col3 = st.columns(3)
+            
+            avg_pred_ret_15d = latest_df_15d['pred_ret_15'].mean()
+            max_pred_ret_15d = latest_df_15d['pred_ret_15'].max()
+            num_sectors_15d = latest_df_15d['sector_cn'].nunique() if 'sector_cn' in latest_df_15d.columns else 0
+            
+            col1.metric("平均预测收益(15D)", format_percent(avg_pred_ret_15d))
+            col2.metric("最高预测收益(15D)", format_percent(max_pred_ret_15d))
+            col3.metric("覆盖行业数", f"{num_sectors_15d}")
+            
+            st.markdown("---")
+            
+            # Main table
+            display_cols_15d = ['symbol', 'name', 'sector_cn', 'exchange', 'close', 'pred_ret_15', 'reason_cn']
+            display_df_15d = latest_df_15d[[c for c in display_cols_15d if c in latest_df_15d.columns]].copy()
+            
+            # Add chart links
+            if 'symbol' in display_df_15d.columns and 'exchange' in latest_df_15d.columns:
+                display_df_15d['chart_link'] = latest_df_15d.apply(
+                    lambda row: get_stock_link(row['symbol'], row['exchange']), axis=1
+                )
+            
+            # Format columns
+            if 'exchange' in display_df_15d.columns:
+                display_df_15d['exchange'] = display_df_15d['exchange'].map(get_exchange_name)
+            if 'close' in display_df_15d.columns:
+                display_df_15d['close'] = display_df_15d['close'].apply(format_price)
+            if 'pred_ret_15' in display_df_15d.columns:
+                display_df_15d['pred_ret_15'] = display_df_15d['pred_ret_15'].apply(format_percent)
+            
+            # Rename columns for display
+            display_df_15d = display_df_15d.rename(columns={
+                'symbol': '股票代码',
+                'name': '股票名称',
+                'sector_cn': '行业',
+                'exchange': '交易所',
+                'close': '当前价格',
+                'pred_ret_15': '预测收益(15D)',
+                'reason_cn': '选股理由',
+                'chart_link': '📈 行情'
+            })
+            
+            st.dataframe(
+                display_df_15d,
+                use_container_width=True,
+                hide_index=True,
+                height=450,
+                column_config={
+                    '📈 行情': st.column_config.LinkColumn(
+                        '📈 行情',
+                        help='点击查看实时行情 (Click to view live chart)',
+                        display_text='查看'
+                    )
+                }
+            )
+            
+            # 15-day chart
+            st.markdown("---")
+            st.subheader("15日预测收益率")
+            fig_pred_15d = render_predictions_chart_15d(latest_df_15d)
+            st.plotly_chart(fig_pred_15d, use_container_width=True)
+    
+    # ========== TAB 3: Charts & Analysis ==========
+    with tab3:
         st.header("📊 图表分析 (Charts & Analysis)")
         
         if latest_df.empty:
@@ -496,8 +660,8 @@ def main():
                     if fig_hist:
                         st.plotly_chart(fig_hist, use_container_width=True)
     
-    # ========== TAB 3: Historical ==========
-    with tab3:
+    # ========== TAB 4: Historical ==========
+    with tab4:
         st.header("📅 历史预测记录")
         
         if history_df.empty:
@@ -519,7 +683,7 @@ def main():
                 if date_df.empty:
                     st.warning(f"No data for {selected_date}")
                 else:
-                    st.subheader(f"{selected_date.strftime('%Y-%m-%d')} Top-10")
+                    st.subheader(f"{selected_date.strftime('%Y-%m-%d')} Top-10 (5日预测)")
                     
                     display_cols = ['symbol', 'exchange', 'close', 'pred_ret_5', 'pred_price_5d', 'reason_cn']
                     display_df = date_df[[c for c in display_cols if c in date_df.columns]].copy()
@@ -537,7 +701,7 @@ def main():
                         'symbol': '股票代码',
                         'exchange': '交易所',
                         'close': '当时价格',
-                        'pred_ret_5': '预测收益',
+                        'pred_ret_5': '预测收益(5D)',
                         'pred_price_5d': '目标价格',
                         'reason_cn': '选股理由'
                     })
@@ -557,18 +721,18 @@ def main():
                 freq = history_df['symbol'].value_counts().head(20)
                 st.bar_chart(freq)
     
-    # ========== TAB 4: About ==========
-    with tab4:
+    # ========== TAB 5: About ==========
+    with tab5:
         st.header("关于本应用 (About)")
         
         st.markdown("""
         ### 🇨🇳 中国A股 Top-10 预测器
         
-        本应用使用机器学习预测未来5个交易日最有可能跑赢大盘的10只A股股票。
+        本应用使用机器学习预测未来5个和15个交易日最有可能跑赢大盘的10只A股股票。
         
         #### 功能特点
         
-        - **🏆 每日预测**: 精选10只最具潜力股票
+        - **🏆 多周期预测**: 5日和15日两种预测周期
         - **📊 置信区间**: 90%置信度的预测范围
         - **📈 历史追踪**: 预测准确率统计
         - **🔍 深度分析**: 个股详细图表分析
@@ -577,7 +741,7 @@ def main():
         
         1. **数据采集**: 从 EODHD API 获取上交所(SHG)和深交所(SHE)股票数据
         2. **特征工程**: 计算40+技术指标
-        3. **两阶段预测**: LightGBM排序 + XGBoost回归
+        3. **两阶段预测**: RandomForest排序 + GradientBoosting回归
         4. **置信估计**: 预测不确定性量化
         
         #### 覆盖范围

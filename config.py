@@ -25,9 +25,17 @@ TOP10_LATEST_FILE = OUTPUTS_DIR / "top10_latest.parquet"
 TOP10_HISTORY_FILE = OUTPUTS_DIR / "top10_history.parquet"
 QUALITY_REPORT_FILE = OUTPUTS_DIR / "quality_report.json"
 
-# Model files
+# Model files - 5-day predictions
 RANKER_MODEL_FILE = MODELS_DIR / "ranker.txt"
 REGRESSOR_MODEL_FILE = MODELS_DIR / "regressor.pkl"
+
+# Model files - 15-day predictions
+RANKER_15D_MODEL_FILE = MODELS_DIR / "ranker_15d.txt"
+REGRESSOR_15D_MODEL_FILE = MODELS_DIR / "regressor_15d.pkl"
+
+# Output files - 15-day predictions
+TOP10_LATEST_15D_FILE = OUTPUTS_DIR / "top10_latest_15d.parquet"
+TOP10_HISTORY_15D_FILE = OUTPUTS_DIR / "top10_history_15d.parquet"
 
 # ============ API Configuration ============
 EODHD_API_TOKEN = os.environ.get("EODHD_API_TOKEN", "697c670dd1a9d9.07390782")
@@ -162,8 +170,9 @@ FEATURE_COLS = [
     'news_sentiment_positive_ratio', 'news_sentiment_trend',
 ]
 
-# Target column
+# Target columns
 TARGET_COL = 'fwd_ret_5'  # 5-day forward return
+TARGET_COL_15D = 'fwd_ret_15'  # 15-day forward return
 
 # ============ Sector Settings ============
 # Maximum stocks per sector in top-10 (for diversification)

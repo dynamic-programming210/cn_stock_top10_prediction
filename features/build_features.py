@@ -29,8 +29,8 @@ def compute_returns(df: pd.DataFrame, horizons: List[int] = RETURN_HORIZONS) -> 
     return df
 
 
-def compute_forward_returns(df: pd.DataFrame, horizons: List[int] = [5]) -> pd.DataFrame:
-    """Compute forward returns (targets)"""
+def compute_forward_returns(df: pd.DataFrame, horizons: List[int] = [5, 15]) -> pd.DataFrame:
+    """Compute forward returns (targets) - 5-day and 15-day"""
     df = df.copy()
     
     for h in horizons:
