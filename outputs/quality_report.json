@@ -1,20 +1,20 @@
 {
-  "generated_at": "2026-02-07T04:05:30.698696",
-  "asof_date": "2026-02-05",
+  "generated_at": "2026-02-07T13:09:24.967351",
+  "asof_date": "2026-02-06",
   "data": {
-    "total_bars": 2222681,
+    "total_bars": 2219749,
     "unique_symbols": 3052,
-    "date_range": "2023-02-06 to 2026-02-05",
+    "date_range": "2023-02-08 to 2026-02-06",
     "exchanges": [
       "SHE",
       "SHG"
     ]
   },
   "features": {
-    "total_rows": 2222681,
+    "total_rows": 2219749,
     "unique_symbols": 3052
   },
   "coverage": {
-    "asof_date_rate": 0.9986893840104849
+    "asof_date_rate": 0.9983617300131061
   }
 }
