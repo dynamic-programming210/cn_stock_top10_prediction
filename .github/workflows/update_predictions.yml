@@ -32,13 +32,22 @@ env:
 permissions:
   contents: write  # Allow pushing commits
 
+# Ensure only one workflow runs at a time, cancel older runs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Default timeout for all jobs: 4 hours total workflow budget
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # ==========================================================
   # Job 1: Fetch stock data (can be parallelized by exchange)
   # ==========================================================
   fetch-data-shg:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
     if: ${{ github.event.inputs.full_refresh == 'true' }}
     outputs:
       has_data: ${{ steps.fetch.outputs.has_data }}
@@ -98,7 +107,6 @@ jobs:
 
   fetch-data-she:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
     if: ${{ github.event.inputs.full_refresh == 'true' }}
     outputs:
       has_data: ${{ steps.fetch.outputs.has_data }}
@@ -161,7 +169,6 @@ jobs:
   # ==========================================================
   merge-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     needs: [fetch-data-shg, fetch-data-she]
     if: ${{ always() && github.event.inputs.full_refresh == 'true' && (needs.fetch-data-shg.result == 'success' || needs.fetch-data-she.result == 'success') }}
     steps:
@@ -224,7 +231,6 @@ jobs:
   # ==========================================================
   fetch-incremental:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     if: ${{ github.event.inputs.full_refresh != 'true' }}
     steps:
       - uses: actions/checkout@v4
@@ -251,7 +257,6 @@ jobs:
   # ==========================================================
   fetch-news:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
     if: ${{ github.event.inputs.fetch_news != 'false' }}
     steps:
       - uses: actions/checkout@v4
@@ -263,9 +268,8 @@ jobs:
           pip install -r requirements.txt
           pip install snownlp
       
-      - name: Fetch news sentiment (with timeout)
+      - name: Fetch news sentiment
         continue-on-error: true
-        timeout-minutes: 80
         run: |
           python -c "
           import sys
@@ -302,7 +306,6 @@ jobs:
   # ==========================================================
   build-and-predict:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     needs: [merge-data, fetch-incremental, fetch-news]
     if: |
       always() && 
