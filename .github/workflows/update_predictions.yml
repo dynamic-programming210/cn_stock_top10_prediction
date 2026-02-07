@@ -74,10 +74,10 @@ jobs:
           
           # Fetch only SHG symbols
           universe = client.get_exchange_symbols('SHG', 'common_stock')
-          universe = universe[universe['type'] == 'Common Stock'].copy() if 'type' in universe.columns else universe
+          universe = universe[universe['Type'] == 'Common Stock'].copy() if 'Type' in universe.columns else universe
           
-          # Filter main board
-          universe = universe[universe['symbol'].str.startswith(('600', '601', '603', '605'))].copy()
+          # Filter main board (Code column contains the symbol)
+          universe = universe[universe['Code'].str.startswith(('600', '601', '603', '605'))].copy()
           print(f'SHG universe: {len(universe)} symbols')
           
           # Fetch bars
@@ -86,7 +86,7 @@ jobs:
           
           all_bars = []
           for i, (_, row) in enumerate(universe.iterrows()):
-              df = client.get_eod_data(row['symbol'], 'SHG', from_date, to_date)
+              df = client.get_eod_data(row['Code'], 'SHG', from_date, to_date)
               if not df.empty:
                   all_bars.append(df)
               if (i + 1) % 100 == 0:
@@ -133,10 +133,10 @@ jobs:
           
           # Fetch only SHE symbols
           universe = client.get_exchange_symbols('SHE', 'common_stock')
-          universe = universe[universe['type'] == 'Common Stock'].copy() if 'type' in universe.columns else universe
+          universe = universe[universe['Type'] == 'Common Stock'].copy() if 'Type' in universe.columns else universe
           
-          # Filter main board
-          universe = universe[universe['symbol'].str.startswith(('000', '001', '002'))].copy()
+          # Filter main board (Code column contains the symbol)
+          universe = universe[universe['Code'].str.startswith(('000', '001', '002'))].copy()
           print(f'SHE universe: {len(universe)} symbols')
           
           # Fetch bars
@@ -145,7 +145,7 @@ jobs:
           
           all_bars = []
           for i, (_, row) in enumerate(universe.iterrows()):
-              df = client.get_eod_data(row['symbol'], 'SHE', from_date, to_date)
+              df = client.get_eod_data(row['Code'], 'SHE', from_date, to_date)
               if not df.empty:
                   all_bars.append(df)
               if (i + 1) % 100 == 0:
