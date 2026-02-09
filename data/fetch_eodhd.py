@@ -167,19 +167,18 @@ def fetch_universe(client: EODHDClient = None) -> pd.DataFrame:
     # Filter to common stocks only
     universe = universe[universe['type'] == 'Common Stock'].copy()
     
-    # Filter out special boards (科创板 688xxx, 创业板 300xxx, 北交所 etc.)
-    # Keep main board stocks for now: 
-    # Shanghai: 600xxx, 601xxx, 603xxx, 605xxx
-    # Shenzhen: 000xxx, 001xxx, 002xxx
-    def is_main_board(symbol, exchange):
+    # Include main boards + ChiNext (创业板) + STAR Market (科创板)
+    # Shanghai: 600xxx, 601xxx, 603xxx, 605xxx (Main Board), 688xxx, 689xxx (STAR Market/科创板)
+    # Shenzhen: 000xxx, 001xxx, 002xxx, 003xxx (Main Board), 300xxx, 301xxx (ChiNext/创业板)
+    def is_valid_stock(symbol, exchange):
         code = str(symbol)
         if exchange == 'SHG':
-            return code.startswith(('600', '601', '603', '605'))
+            return code.startswith(('600', '601', '603', '605', '688', '689'))
         elif exchange == 'SHE':
-            return code.startswith(('000', '001', '002'))
+            return code.startswith(('000', '001', '002', '003', '300', '301'))
         return False
     
-    mask = universe.apply(lambda row: is_main_board(row['symbol'], row['exchange']), axis=1)
+    mask = universe.apply(lambda row: is_valid_stock(row['symbol'], row['exchange']), axis=1)
     universe = universe[mask].copy()
     
     logger.info(f"Universe after filtering: {len(universe)} stocks")
