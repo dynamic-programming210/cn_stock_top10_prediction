@@ -141,17 +141,16 @@ class StockWatcher:
         
     def load_models(self):
         """Load prediction models"""
-        import lightgbm as lgb
         import joblib
         
         if RANKER_MODEL_FILE.exists():
-            self.ranker_5d = lgb.Booster(model_file=str(RANKER_MODEL_FILE))
+            self.ranker_5d = joblib.load(RANKER_MODEL_FILE)
             logger.info("Loaded 5-day ranker")
         if REGRESSOR_MODEL_FILE.exists():
             self.model_5d = joblib.load(REGRESSOR_MODEL_FILE)
             logger.info("Loaded 5-day regressor")
         if RANKER_15D_MODEL_FILE.exists():
-            self.ranker_15d = lgb.Booster(model_file=str(RANKER_15D_MODEL_FILE))
+            self.ranker_15d = joblib.load(RANKER_15D_MODEL_FILE)
             logger.info("Loaded 15-day ranker")
         if REGRESSOR_15D_MODEL_FILE.exists():
             self.model_15d = joblib.load(REGRESSOR_15D_MODEL_FILE)
@@ -192,9 +191,9 @@ class StockWatcher:
         if self.model_15d:
             pred_ret_15 = float(self.model_15d.predict(X)[0])
         if self.ranker_5d:
-            rank_5 = 1 / (1 + np.exp(-float(self.ranker_5d.predict(X)[0])))
+            rank_5 = float(self.ranker_5d.predict_proba(X)[0][1]) if hasattr(self.ranker_5d, "predict_proba") else 0.5
         if self.ranker_15d:
-            rank_15 = 1 / (1 + np.exp(-float(self.ranker_15d.predict(X)[0])))
+            rank_15 = float(self.ranker_15d.predict_proba(X)[0][1]) if hasattr(self.ranker_15d, "predict_proba") else 0.5
         
         current_price = float(stock_row.get("close", stock_row.get("adj_close", 0)))
         vol = float(stock_row.get("vol_5", 0.03))
