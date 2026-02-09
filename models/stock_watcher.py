@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import logging
+import pickle
 from typing import List, Dict, Optional
 
 from config import (
@@ -140,20 +141,30 @@ class StockWatcher:
         self.bars_df = None
         
     def load_models(self):
-        """Load prediction models"""
-        import joblib
+        """Load prediction models - models are stored as dicts with 'model' key"""
         
         if RANKER_MODEL_FILE.exists():
-            self.ranker_5d = joblib.load(RANKER_MODEL_FILE)
+            with open(RANKER_MODEL_FILE, 'rb') as f:
+                data = pickle.load(f)
+                self.ranker_5d = data['model'] if isinstance(data, dict) and 'model' in data else data
             logger.info("Loaded 5-day ranker")
+            
         if REGRESSOR_MODEL_FILE.exists():
-            self.model_5d = joblib.load(REGRESSOR_MODEL_FILE)
+            with open(REGRESSOR_MODEL_FILE, 'rb') as f:
+                data = pickle.load(f)
+                self.model_5d = data['model'] if isinstance(data, dict) and 'model' in data else data
             logger.info("Loaded 5-day regressor")
+            
         if RANKER_15D_MODEL_FILE.exists():
-            self.ranker_15d = joblib.load(RANKER_15D_MODEL_FILE)
+            with open(RANKER_15D_MODEL_FILE, 'rb') as f:
+                data = pickle.load(f)
+                self.ranker_15d = data['model'] if isinstance(data, dict) and 'model' in data else data
             logger.info("Loaded 15-day ranker")
+            
         if REGRESSOR_15D_MODEL_FILE.exists():
-            self.model_15d = joblib.load(REGRESSOR_15D_MODEL_FILE)
+            with open(REGRESSOR_15D_MODEL_FILE, 'rb') as f:
+                data = pickle.load(f)
+                self.model_15d = data['model'] if isinstance(data, dict) and 'model' in data else data
             logger.info("Loaded 15-day regressor")
     
     def load_data(self):
@@ -170,13 +181,17 @@ class StockWatcher:
         if self.features_df is None or self.bars_df is None:
             return None
         
+        # Add exchange suffix to symbol for matching
+        exchange = get_stock_exchange(symbol)
+        full_symbol = f"{symbol}.{exchange}"
+        
         stock_features = self.features_df[
-            (self.features_df["symbol"] == symbol) & 
+            (self.features_df["symbol"] == full_symbol) & 
             (self.features_df["date"] == latest_date)
         ]
         
         if stock_features.empty:
-            logger.warning(f"No features for {symbol} on {latest_date}")
+            logger.warning(f"No features for {full_symbol} on {latest_date}")
             return None
         
         stock_row = stock_features.iloc[0]
@@ -200,13 +215,13 @@ class StockWatcher:
         trend = float(stock_row.get("trend_score", 0.5))
         news = float(stock_row.get("news_sentiment_mean", 0.5))
         
-        sr = calc_support_resistance(self.bars_df, symbol)
+        sr = calc_support_resistance(self.bars_df, full_symbol)
         prices = calc_buy_sell_prices(current_price, pred_ret_5, pred_ret_15, vol, sr)
         action, reason, conf = gen_recommendation(pred_ret_5, pred_ret_15, rank_5, rank_15, vol, trend, news)
         
         return {
             "symbol": symbol,
-            "exchange": get_stock_exchange(symbol),
+            "exchange": exchange,
             "date": latest_date,
             "current_price": current_price,
             "pred_ret_5": pred_ret_5,
