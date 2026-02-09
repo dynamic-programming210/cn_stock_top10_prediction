@@ -91,7 +91,7 @@ jobs:
           python -c "
           import sys
           sys.path.insert(0, '.')
-          from features.build_features import build_all_features
+          from features.build_features import build_features
           from config import BARS_FILE, FEATURES_Z_FILE
           import pandas as pd
           
@@ -100,7 +100,7 @@ jobs:
           print(f'Bars: {len(bars)} rows')
           
           print('Building features...')
-          features = build_all_features(bars)
+          features = build_features(bars, save=False, zscore=True)
           print(f'Features: {len(features)} rows')
           
           features.to_parquet(FEATURES_Z_FILE, index=False)
