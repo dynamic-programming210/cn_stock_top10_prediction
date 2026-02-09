@@ -28,6 +28,9 @@ concurrency:
   group: stock-watcher-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 env:
   EODHD_API_KEY: ${{ secrets.EODHD_API_KEY }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
