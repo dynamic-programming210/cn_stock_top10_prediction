@@ -1,5 +1,5 @@
 # Stock Watcher Workflow
-# Triggers when input.txt is updated (via push or manually)
+# Triggers when input.txt is updated, manually, or after main workflow
 
 name: Stock Watcher
 
@@ -19,6 +19,10 @@ on:
         options:
           - 'true'
           - 'false'
+  workflow_run:
+    workflows: ["Update Predictions"]
+    types:
+      - completed
 
 concurrency:
   group: stock-watcher-${{ github.ref }}
@@ -31,6 +35,10 @@ env:
 jobs:
   run-stock-watcher:
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' || 
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     
     steps:
       - name: Checkout repository
@@ -49,23 +57,55 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: Download artifacts from main workflow
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          workflow: update_predictions.yml
-          name: prediction-data
-          path: ./
-          if_no_artifact_found: warn
-        continue-on-error: true
-      
-      - name: Extract prediction data
+      - name: Check required data files
+        id: check-data
         run: |
-          if [ -f prediction_data.tar.gz ]; then
-            tar -xzf prediction_data.tar.gz
-            echo "✅ Extracted prediction data"
+          echo "Checking required data files..."
+          
+          if [ -f data/features_z.parquet ]; then
+            echo "✅ features_z.parquet found"
+            echo "has_features=true" >> $GITHUB_OUTPUT
           else
-            echo "⚠️ No prediction data artifact found"
+            echo "⚠️ features_z.parquet not found, will build"
+            echo "has_features=false" >> $GITHUB_OUTPUT
           fi
+          
+          if [ -f models/ranker.txt ] && [ -f models/regressor.pkl ]; then
+            echo "✅ Model files found"
+          else
+            echo "❌ Model files missing!"
+            exit 1
+          fi
+          
+          if [ -f data/bars.parquet ]; then
+            echo "✅ bars.parquet found"
+          else
+            echo "❌ bars.parquet missing!"
+            exit 1
+          fi
+      
+      - name: Build features if needed
+        if: steps.check-data.outputs.has_features != 'true'
+        run: |
+          echo "Building features from bars data..."
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from features.build_features import build_all_features
+          from config import BARS_FILE, FEATURES_Z_FILE
+          import pandas as pd
+          
+          print('Loading bars...')
+          bars = pd.read_parquet(BARS_FILE)
+          print(f'Bars: {len(bars)} rows')
+          
+          print('Building features...')
+          features = build_all_features(bars)
+          print(f'Features: {len(features)} rows')
+          
+          features.to_parquet(FEATURES_Z_FILE, index=False)
+          print('Done!')
+          "
       
       - name: Check input file
         run: |
@@ -83,25 +123,29 @@ jobs:
       
       - name: Upload watcher results
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: watcher-predictions
           path: |
             outputs/watcher_predictions.parquet
             outputs/watcher_history.parquet
           retention-days: 30
+          if-no-files-found: warn
       
       - name: Commit results
         run: |
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'actions@github.com'
           
-          # Add output files
-          git add outputs/watcher_predictions.parquet outputs/watcher_history.parquet || true
-          
-          # Check if there are changes to commit
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
+          if [ -f outputs/watcher_predictions.parquet ]; then
+            git add outputs/watcher_predictions.parquet outputs/watcher_history.parquet || true
+            
+            if git diff --staged --quiet; then
+              echo "No changes to commit"
+            else
+              git commit -m "🔄 Update stock watcher predictions [skip ci]"
+              git push
+            fi
           else
-            git commit -m "🔄 Update stock watcher predictions [skip ci]"
-            git push
+            echo "⚠️ No watcher predictions generated"
           fi
