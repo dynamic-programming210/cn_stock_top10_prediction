@@ -14,7 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import (
     TOP10_LATEST_FILE, TOP10_HISTORY_FILE, QUALITY_REPORT_FILE,
-    UNIVERSE_META_FILE, CURRENT_MODEL_VERSION, OUTPUTS_DIR, EXCHANGES
+    UNIVERSE_META_FILE, CURRENT_MODEL_VERSION, OUTPUTS_DIR, EXCHANGES,
+    WATCHER_OUTPUT_FILE, WATCHER_HISTORY_FILE, WATCHER_INPUT_FILE
 )
 
 # 15-day prediction files
@@ -44,6 +45,48 @@ def load_latest_top10():
         df = merge_stock_names(df)
         return df
     return pd.DataFrame()
+
+
+@st.cache_data(ttl=300)
+def load_watcher_predictions():
+    """Load stock watcher predictions"""
+    if WATCHER_OUTPUT_FILE.exists():
+        df = pd.read_parquet(WATCHER_OUTPUT_FILE)
+        df['date'] = pd.to_datetime(df['date'])
+        # Merge with universe to get stock names
+        df = merge_stock_names(df)
+        return df
+    return pd.DataFrame()
+
+
+@st.cache_data(ttl=300)
+def load_watcher_history():
+    """Load stock watcher historical predictions"""
+    if WATCHER_HISTORY_FILE.exists():
+        df = pd.read_parquet(WATCHER_HISTORY_FILE)
+        df['date'] = pd.to_datetime(df['date'])
+        df = merge_stock_names(df)
+        return df
+    return pd.DataFrame()
+
+
+@st.cache_data(ttl=300)
+def load_watch_list():
+    """Load current watch list from input file"""
+    if WATCHER_INPUT_FILE.exists():
+        with open(WATCHER_INPUT_FILE, 'r') as f:
+            text = f.read().strip()
+        codes = []
+        for line in text.split('\n'):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            for code in line.split(','):
+                code = code.strip()
+                if code and code.isdigit():
+                    codes.append(code)
+        return list(set(codes))
+    return []
 
 
 @st.cache_data(ttl=300)
@@ -406,10 +449,11 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.caption(f"模型版本: {CURRENT_MODEL_VERSION}")
     
-    # Main content tabs - now with 15-day tab
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    # Main content tabs - now with Stock Watcher tab
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🏆 5日预测", 
         "📆 15日预测",
+        "⭐ 自选股",
         "📊 图表分析",
         "📅 历史记录", 
         "ℹ️ 关于"
@@ -594,8 +638,157 @@ def main():
             fig_pred_15d = render_predictions_chart_15d(latest_df_15d)
             st.plotly_chart(fig_pred_15d, use_container_width=True)
     
-    # ========== TAB 3: Charts & Analysis ==========
+    # ========== TAB 3: Stock Watcher (自选股) ==========
     with tab3:
+        st.header("⭐ 自选股监控 (Stock Watcher)")
+        st.markdown("*跟踪您的自选股票，获取买卖建议*")
+        
+        # Load watcher data
+        watcher_df = load_watcher_predictions()
+        watcher_history = load_watcher_history()
+        watch_list = load_watch_list()
+        
+        # Show current watch list
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("⭐ 自选股列表")
+        if watch_list:
+            st.sidebar.write(", ".join(watch_list))
+        else:
+            st.sidebar.warning("暂无自选股")
+        
+        if watcher_df.empty:
+            st.warning("暂无自选股预测数据。")
+            st.markdown("""
+            **如何使用自选股功能：**
+            
+            1. 编辑 `inputs/input.txt` 文件，添加您要跟踪的股票代码
+            2. 每行一个代码，或用逗号分隔多个代码
+            3. 例如：`300136,000609,600519`
+            4. 运行 `python models/stock_watcher.py` 生成预测
+            """)
+            
+            if watch_list:
+                st.info(f"当前监控列表: {', '.join(watch_list)}")
+        else:
+            # Display date
+            pred_date = watcher_df['date'].iloc[0]
+            st.subheader(f"预测日期: {pred_date.strftime('%Y-%m-%d')}")
+            
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            
+            buy_count = (watcher_df['action'] == '买入').sum()
+            sell_count = (watcher_df['action'] == '卖出').sum()
+            avg_conf = watcher_df['confidence'].mean() if 'confidence' in watcher_df.columns else 0.5
+            avg_ret_5 = watcher_df['pred_ret_5'].mean() if 'pred_ret_5' in watcher_df.columns else 0
+            
+            col1.metric("监控股票数", len(watcher_df))
+            col2.metric("建议买入", f"{buy_count} 只", delta=None)
+            col3.metric("建议卖出", f"{sell_count} 只", delta=None)
+            col4.metric("平均置信度", f"{avg_conf:.0%}")
+            
+            st.markdown("---")
+            
+            # Display each stock as a card
+            st.subheader("📊 详细建议")
+            
+            for idx, row in watcher_df.iterrows():
+                # Determine action color
+                action = row.get('action', '观望')
+                if action == '买入':
+                    action_color = '🟢'
+                    action_bg = '#d4edda'
+                elif action == '卖出':
+                    action_color = '🔴'
+                    action_bg = '#f8d7da'
+                elif action == '持有':
+                    action_color = '🟡'
+                    action_bg = '#fff3cd'
+                else:
+                    action_color = '⚪'
+                    action_bg = '#e2e3e5'
+                
+                symbol = row['symbol']
+                name = row.get('name', '')
+                current_price = row.get('current_price', 0)
+                pred_ret_5 = row.get('pred_ret_5', 0)
+                pred_ret_15 = row.get('pred_ret_15', 0)
+                buy_price = row.get('buy_price', 0)
+                sell_5d = row.get('sell_price_5d', 0)
+                sell_15d = row.get('sell_price_15d', 0)
+                stop_loss = row.get('stop_loss', 0)
+                confidence = row.get('confidence', 0.5)
+                reason = row.get('reason_cn', '')
+                
+                with st.expander(f"{action_color} **{symbol}** {name} - {action} (置信度: {confidence:.0%})", expanded=True):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.markdown("**当前价格**")
+                        st.markdown(f"### ¥{current_price:.2f}")
+                        st.markdown(f"5日预测: **{pred_ret_5*100:+.2f}%**")
+                        st.markdown(f"15日预测: **{pred_ret_15*100:+.2f}%**")
+                    
+                    with col2:
+                        st.markdown("**建议价格**")
+                        st.markdown(f"🟢 买入价: ¥{buy_price:.2f}")
+                        st.markdown(f"🟡 卖出价(5D): ¥{sell_5d:.2f}")
+                        st.markdown(f"🟠 卖出价(15D): ¥{sell_15d:.2f}")
+                        st.markdown(f"🔴 止损价: ¥{stop_loss:.2f}")
+                    
+                    with col3:
+                        st.markdown("**投资建议**")
+                        st.markdown(f"### {action_color} {action}")
+                        st.markdown(f"置信度: {confidence:.0%}")
+                        if reason:
+                            st.markdown(f"*{reason}*")
+                    
+                    # Link to view chart
+                    exchange = row.get('exchange', 'SHE')
+                    chart_url = get_stock_link(symbol, exchange)
+                    st.markdown(f"[📈 查看实时行情]({chart_url})")
+            
+            st.markdown("---")
+            
+            # Table view
+            st.subheader("📋 汇总表格")
+            
+            display_cols = ['symbol', 'name', 'current_price', 'pred_ret_5', 'pred_ret_15',
+                           'buy_price', 'sell_price_5d', 'sell_price_15d', 'stop_loss',
+                           'action', 'confidence', 'reason_cn']
+            display_df = watcher_df[[c for c in display_cols if c in watcher_df.columns]].copy()
+            
+            # Format columns
+            if 'current_price' in display_df.columns:
+                display_df['current_price'] = display_df['current_price'].apply(lambda x: f"¥{x:.2f}")
+            for col in ['buy_price', 'sell_price_5d', 'sell_price_15d', 'stop_loss']:
+                if col in display_df.columns:
+                    display_df[col] = display_df[col].apply(lambda x: f"¥{x:.2f}" if pd.notna(x) else "N/A")
+            for col in ['pred_ret_5', 'pred_ret_15']:
+                if col in display_df.columns:
+                    display_df[col] = display_df[col].apply(lambda x: f"{x*100:+.2f}%" if pd.notna(x) else "N/A")
+            if 'confidence' in display_df.columns:
+                display_df['confidence'] = display_df['confidence'].apply(lambda x: f"{x:.0%}")
+            
+            display_df = display_df.rename(columns={
+                'symbol': '代码',
+                'name': '名称',
+                'current_price': '当前价',
+                'pred_ret_5': '5日预测',
+                'pred_ret_15': '15日预测',
+                'buy_price': '买入价',
+                'sell_price_5d': '卖出(5D)',
+                'sell_price_15d': '卖出(15D)',
+                'stop_loss': '止损价',
+                'action': '建议',
+                'confidence': '置信度',
+                'reason_cn': '理由'
+            })
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+    
+    # ========== TAB 4: Charts & Analysis ==========
+    with tab4:
         st.header("📊 图表分析 (Charts & Analysis)")
         
         if latest_df.empty:
@@ -660,8 +853,8 @@ def main():
                     if fig_hist:
                         st.plotly_chart(fig_hist, use_container_width=True)
     
-    # ========== TAB 4: Historical ==========
-    with tab4:
+    # ========== TAB 5: Historical ==========
+    with tab5:
         st.header("📅 历史预测记录")
         
         if history_df.empty:
@@ -721,8 +914,8 @@ def main():
                 freq = history_df['symbol'].value_counts().head(20)
                 st.bar_chart(freq)
     
-    # ========== TAB 5: About ==========
-    with tab5:
+    # ========== TAB 6: About ==========
+    with tab6:
         st.header("关于本应用 (About)")
         
         st.markdown("""

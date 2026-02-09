@@ -1,0 +1,107 @@
+# Stock Watcher Workflow
+# Triggers when input.txt is updated (via push or manually)
+
+name: Stock Watcher
+
+on:
+  push:
+    paths:
+      - 'inputs/input.txt'
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      force_update:
+        description: 'Force update watcher predictions'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+concurrency:
+  group: stock-watcher-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EODHD_API_KEY: ${{ secrets.EODHD_API_KEY }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  run-stock-watcher:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Download artifacts from main workflow
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: update_predictions.yml
+          name: prediction-data
+          path: ./
+          if_no_artifact_found: warn
+        continue-on-error: true
+      
+      - name: Extract prediction data
+        run: |
+          if [ -f prediction_data.tar.gz ]; then
+            tar -xzf prediction_data.tar.gz
+            echo "✅ Extracted prediction data"
+          else
+            echo "⚠️ No prediction data artifact found"
+          fi
+      
+      - name: Check input file
+        run: |
+          if [ -f inputs/input.txt ]; then
+            echo "📋 Watch list:"
+            cat inputs/input.txt
+          else
+            echo "❌ No input.txt found"
+            exit 1
+          fi
+      
+      - name: Run Stock Watcher
+        run: |
+          python models/stock_watcher.py
+      
+      - name: Upload watcher results
+        uses: actions/upload-artifact@v4
+        with:
+          name: watcher-predictions
+          path: |
+            outputs/watcher_predictions.parquet
+            outputs/watcher_history.parquet
+          retention-days: 30
+      
+      - name: Commit results
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          
+          # Add output files
+          git add outputs/watcher_predictions.parquet outputs/watcher_history.parquet || true
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "🔄 Update stock watcher predictions [skip ci]"
+            git push
+          fi

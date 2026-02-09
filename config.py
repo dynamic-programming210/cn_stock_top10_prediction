@@ -256,3 +256,12 @@ LUNCH_BREAK_END = "13:00"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+# ============ Stock Watcher Settings ============
+INPUTS_DIR = PROJECT_ROOT / "inputs"
+WATCHER_INPUT_FILE = INPUTS_DIR / "input.txt"
+WATCHER_OUTPUT_FILE = OUTPUTS_DIR / "watcher_predictions.parquet"
+WATCHER_HISTORY_FILE = OUTPUTS_DIR / "watcher_history.parquet"
+
+# Create inputs directory
+INPUTS_DIR.mkdir(parents=True, exist_ok=True)
