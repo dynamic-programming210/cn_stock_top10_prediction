@@ -62,11 +62,12 @@ jobs:
         run: |
           echo "Checking required data files..."
           
-          if [ -f data/features_z.parquet ]; then
-            echo "✅ features_z.parquet found"
+          # Check for feat_z.parquet (correct filename from config.py)
+          if [ -f data/feat_z.parquet ]; then
+            echo "✅ feat_z.parquet found"
             echo "has_features=true" >> $GITHUB_OUTPUT
           else
-            echo "⚠️ features_z.parquet not found, will build"
+            echo "⚠️ feat_z.parquet not found, will build"
             echo "has_features=false" >> $GITHUB_OUTPUT
           fi
           

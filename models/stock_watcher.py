@@ -181,9 +181,18 @@ class StockWatcher:
         if self.features_df is None or self.bars_df is None:
             return None
         
-        # Add exchange suffix to symbol for matching
-        exchange = get_stock_exchange(symbol)
-        full_symbol = f"{symbol}.{exchange}"
+        # Check what symbol format is used in features
+        sample_sym = self.features_df["symbol"].iloc[0] if len(self.features_df) > 0 else ""
+        has_exchange_suffix = "." in str(sample_sym)
+        
+        if has_exchange_suffix:
+            # Features use format like "300136.SHE"
+            exchange = get_stock_exchange(symbol)
+            full_symbol = f"{symbol}.{exchange}"
+        else:
+            # Features use plain format like "300136"
+            full_symbol = symbol
+            exchange = get_stock_exchange(symbol)
         
         stock_features = self.features_df[
             (self.features_df["symbol"] == full_symbol) & 
@@ -215,7 +224,9 @@ class StockWatcher:
         trend = float(stock_row.get("trend_score", 0.5))
         news = float(stock_row.get("news_sentiment_mean", 0.5))
         
-        sr = calc_support_resistance(self.bars_df, full_symbol)
+        # Bars also use plain symbol format
+        bars_symbol = symbol  # Always use plain symbol for bars lookup
+        sr = calc_support_resistance(self.bars_df, bars_symbol)
         prices = calc_buy_sell_prices(current_price, pred_ret_5, pred_ret_15, vol, sr)
         action, reason, conf = gen_recommendation(pred_ret_5, pred_ret_15, rank_5, rank_15, vol, trend, news)
         
