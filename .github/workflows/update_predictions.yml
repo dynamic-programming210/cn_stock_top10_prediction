@@ -367,22 +367,36 @@ jobs:
       
       - name: Generate predictions
         run: |
+          set -e  # Exit on error
           echo "🎯 Generating predictions..."
-          python -c "
-          import sys
-          sys.path.insert(0, '.')
-          from models.train import generate_predictions
-          from models.train_15d import generate_predictions_15d
-          
-          generate_predictions()
-          print('✅ 5-day predictions generated!')
-          
-          try:
-              generate_predictions_15d()
-              print('✅ 15-day predictions generated!')
-          except Exception as e:
-              print(f'⚠️ 15-day predictions skipped: {e}')
-          "
+          python3 << 'EOF'
+import sys
+sys.path.insert(0, '.')
+import traceback
+
+print('Importing modules...')
+from models.train import generate_predictions
+from models.train_15d import generate_predictions_15d
+
+print('Running generate_predictions()...')
+try:
+    generate_predictions()
+    print('✅ 5-day predictions generated!')
+except Exception as e:
+    print(f'❌ 5-day error: {e}')
+    traceback.print_exc()
+    sys.exit(1)
+
+print('Running generate_predictions_15d()...')
+try:
+    generate_predictions_15d()
+    print('✅ 15-day predictions generated!')
+except Exception as e:
+    print(f'⚠️ 15-day predictions skipped: {e}')
+    # Don't fail on 15d errors
+    
+print('✅ All predictions complete!')
+EOF
       
       - name: Show latest predictions
         run: python show_predictions.py

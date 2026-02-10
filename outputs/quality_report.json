@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-10T00:24:36.068281",
+  "generated_at": "2026-02-10T00:39:02.861705",
   "asof_date": "2026-02-09",
   "data": {
     "total_bars": 2216818,
@@ -11,7 +11,7 @@
     ]
   },
   "features": {
-    "total_rows": 2216818,
+    "total_rows": 2222681,
     "unique_symbols": 3052
   },
   "coverage": {
