@@ -404,15 +404,22 @@ class TwoStageModel:
 
 
 def train_model(df: pd.DataFrame = None, 
-                features_file: str = None) -> TwoStageModel:
-    """Train the two-stage model"""
+                features_file: str = None,
+                fast_mode: bool = False) -> TwoStageModel:
+    """Train the two-stage model
+    
+    Args:
+        df: Features dataframe (optional, will load from file if not provided)
+        features_file: Path to features file (optional)
+        fast_mode: If True, use fewer estimators for faster training (CI mode)
+    """
     if df is None:
         features_file = features_file or FEATURES_Z_FILE
         logger.info(f"Loading features from {features_file}")
         df = pd.read_parquet(features_file)
     
     model = TwoStageModel()
-    metrics = model.train(df)
+    metrics = model.train(df, fast_mode=fast_mode)
     
     # Save
     model.save()
@@ -532,8 +539,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train stock prediction model")
     parser.add_argument('--features', type=str, default=None, help="Path to features file")
     parser.add_argument('--retrain', action='store_true', help="Force retrain the model")
+    parser.add_argument('--fast', action='store_true', help="Fast mode with fewer estimators (for CI)")
     
     args = parser.parse_args()
     
-    model = train_model(features_file=args.features)
+    model = train_model(features_file=args.features, fast_mode=args.fast)
     print("Model training complete!")

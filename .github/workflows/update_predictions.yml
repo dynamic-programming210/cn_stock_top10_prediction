@@ -360,7 +360,7 @@ jobs:
         if: ${{ github.event.inputs.retrain_model == 'true' || github.event_name == 'schedule' }}
         run: |
           echo "🤖 Training 5-day model..."
-          python models/train.py --retrain
+          python models/train.py --retrain --fast
           echo "🤖 Training 15-day model..."
           python models/train_15d.py --fast
       
