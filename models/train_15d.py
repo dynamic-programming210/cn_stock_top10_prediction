@@ -92,16 +92,18 @@ class TwoStageModel15D:
         
         # Model parameters based on fast_mode
         if fast_mode:
-            rf_n_estimators = 30
-            rf_max_depth = 6
-            gb_n_estimators = 30
+            rf_n_estimators = 20  # Reduced for CI speed
+            rf_max_depth = 5
+            gb_n_estimators = 20
             gb_max_depth = 3
-            logger.info("FAST MODE: Using reduced model complexity")
+            max_train_samples = 500000  # Sample data for CI speed
+            logger.info("FAST MODE: Using reduced model complexity and sampling")
         else:
             rf_n_estimators = 100
             rf_max_depth = 10
             gb_n_estimators = 100
             gb_max_depth = 5
+            max_train_samples = None
         
         # Set feature columns
         self.feature_cols = feature_cols or [c for c in FEATURE_COLS if c in df.columns]
@@ -112,6 +114,12 @@ class TwoStageModel15D:
         
         # Drop rows with NaN
         clean = df[['date', 'symbol'] + self.feature_cols + [TARGET_COL_15D]].dropna()
+        
+        # Sample data in fast mode to speed up training
+        if max_train_samples and len(clean) > max_train_samples:
+            logger.info(f"Sampling {max_train_samples} from {len(clean)} rows for fast training")
+            clean = clean.sample(n=max_train_samples, random_state=42)
+        
         logger.info(f"Training 15D model on {len(clean)} samples, {clean['symbol'].nunique()} symbols")
         
         # Split by date
