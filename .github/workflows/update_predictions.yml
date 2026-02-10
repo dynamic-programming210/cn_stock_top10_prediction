@@ -32,10 +32,11 @@ env:
 permissions:
   contents: write  # Allow pushing commits
 
-# Ensure only one workflow runs at a time, cancel older runs
+# Ensure only one workflow runs at a time
+# Set cancel-in-progress to false to avoid accidental cancellations
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 # Default timeout for all jobs: 4 hours total workflow budget
 defaults:
