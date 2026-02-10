@@ -76,8 +76,9 @@ jobs:
           universe = client.get_exchange_symbols('SHG', 'common_stock')
           universe = universe[universe['Type'] == 'Common Stock'].copy() if 'Type' in universe.columns else universe
           
-          # Filter main board (Code column contains the symbol)
-          universe = universe[universe['Code'].str.startswith(('600', '601', '603', '605'))].copy()
+          # Filter main board + STAR Market (Code column contains the symbol)
+          # 600/601/603/605 = Main Board, 688/689 = STAR Market (科创板)
+          universe = universe[universe['Code'].str.startswith(('600', '601', '603', '605', '688', '689'))].copy()
           print(f'SHG universe: {len(universe)} symbols')
           
           # Fetch bars
@@ -135,8 +136,9 @@ jobs:
           universe = client.get_exchange_symbols('SHE', 'common_stock')
           universe = universe[universe['Type'] == 'Common Stock'].copy() if 'Type' in universe.columns else universe
           
-          # Filter main board (Code column contains the symbol)
-          universe = universe[universe['Code'].str.startswith(('000', '001', '002'))].copy()
+          # Filter main board + ChiNext (Code column contains the symbol)
+          # 000/001/002/003 = Main Board, 300/301 = ChiNext (创业板)
+          universe = universe[universe['Code'].str.startswith(('000', '001', '002', '003', '300', '301'))].copy()
           print(f'SHE universe: {len(universe)} symbols')
           
           # Fetch bars
