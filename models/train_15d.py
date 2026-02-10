@@ -88,7 +88,7 @@ class TwoStageModel15D:
               validation_split: float = 0.2,
               fast_mode: bool = False) -> dict:
         """Train both ranker and regressor for 15-day horizon"""
-        from sklearn.ensemble import RandomForestClassifier, GradientBoostingRegressor
+        from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingRegressor
         
         # Model parameters based on fast_mode
         if fast_mode:
@@ -148,18 +148,22 @@ class TwoStageModel15D:
         logger.info(f"Ranker accuracy - Train: {train_acc:.4f}, Val: {val_acc:.4f}")
         
         # Stage 2: Train Regressor
-        logger.info("Training Stage 2: GradientBoostingRegressor for 15-day...")
+        logger.info("Training Stage 2: HistGradientBoostingRegressor for 15-day...")
         
         X_reg_train = train_df[self.feature_cols].values
         y_reg_train = train_df[TARGET_COL_15D].values
         X_reg_val = val_df[self.feature_cols].values
         y_reg_val = val_df[TARGET_COL_15D].values
         
-        self.regressor = GradientBoostingRegressor(
-            n_estimators=gb_n_estimators,
+        # HistGradientBoostingRegressor is 10x faster than GradientBoostingRegressor
+        self.regressor = HistGradientBoostingRegressor(
+            max_iter=gb_n_estimators,
             max_depth=gb_max_depth,
             learning_rate=0.05,
-            random_state=42
+            random_state=42,
+            early_stopping=True,
+            validation_fraction=0.1,
+            n_iter_no_change=10
         )
         self.regressor.fit(X_reg_train, y_reg_train, sample_weight=train_weights)
         

@@ -98,9 +98,10 @@ class TwoStageModel:
             validation_split: Fraction for validation
             fast_mode: If True, use faster model settings (fewer trees, shallower)
         """
-        from sklearn.ensemble import RandomForestClassifier, GradientBoostingRegressor
+        from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingRegressor
         
         # Use sklearn only for better compatibility
+        # HistGradientBoostingRegressor is much faster than GradientBoostingRegressor
         use_xgboost = False
         
         # Model parameters based on fast_mode
@@ -177,11 +178,15 @@ class TwoStageModel:
                 verbose=False
             )
         else:
-            self.regressor = GradientBoostingRegressor(
-                n_estimators=gb_n_estimators,
+            # HistGradientBoostingRegressor is 10x faster than GradientBoostingRegressor
+            self.regressor = HistGradientBoostingRegressor(
+                max_iter=gb_n_estimators,
                 max_depth=gb_max_depth,
                 learning_rate=0.05,
-                random_state=42
+                random_state=42,
+                early_stopping=True,
+                validation_fraction=0.1,
+                n_iter_no_change=10
             )
             self.regressor.fit(X_reg_train, y_reg_train, sample_weight=train_weights)
         
