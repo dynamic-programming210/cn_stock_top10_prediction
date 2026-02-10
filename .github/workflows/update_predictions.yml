@@ -360,10 +360,23 @@ jobs:
       - name: Train model (if requested)
         if: ${{ github.event.inputs.retrain_model == 'true' || github.event_name == 'schedule' }}
         run: |
-          echo "🤖 Training 5-day model..."
-          python models/train.py --retrain --fast
-          echo "🤖 Training 15-day model..."
-          python models/train_15d.py --fast
+          set -e
+          echo "=== System Info ==="
+          echo "Python: $(python3 --version)"
+          echo "Memory: $(free -h 2>/dev/null || vm_stat 2>/dev/null | head -5 || echo 'N/A')"
+          echo "Disk: $(df -h . | tail -1)"
+          echo ""
+          echo "=== Training 5-day model ==="
+          time python models/train.py --retrain --fast
+          echo "✅ 5-day model trained"
+          ls -la models/*.pkl models/*.txt 2>/dev/null || echo "Model files:"
+          echo ""
+          echo "=== Training 15-day model ==="
+          time python models/train_15d.py --fast
+          echo "✅ 15-day model trained"
+          ls -la models/*.pkl models/*.txt 2>/dev/null || echo "Model files:"
+          echo ""
+          echo "=== Training Complete ==="
       
       - name: Generate predictions
         run: |
