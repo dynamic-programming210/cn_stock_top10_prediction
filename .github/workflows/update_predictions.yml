@@ -379,9 +379,21 @@ jobs:
           echo "=== Training Complete ==="
       
       - name: Generate predictions
+        id: gen_pred
+        continue-on-error: true
         run: |
           echo "🎯 Generating predictions..."
+          echo "Starting at $(date)"
           python3 scripts/generate_all_predictions.py
+          echo "Finished at $(date)"
+          
+      - name: Check prediction result
+        if: steps.gen_pred.outcome == 'failure'
+        run: |
+          echo "❌ Generate predictions failed!"
+          echo "Outcome: ${{ steps.gen_pred.outcome }}"
+          echo "Conclusion: ${{ steps.gen_pred.conclusion }}"
+          exit 1
       
       - name: Show latest predictions
         run: python show_predictions.py
