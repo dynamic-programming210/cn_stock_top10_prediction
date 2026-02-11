@@ -19,6 +19,15 @@ on:
         required: false
         default: 'true'
         type: boolean
+      training_mode:
+        description: 'Training mode (fast=4s, balanced=24s, full=2min)'
+        required: false
+        default: 'balanced'
+        type: choice
+        options:
+          - fast
+          - balanced
+          - full
   
   # Scheduled runs (UTC time)
   # Chinese market closes at 15:00 CST = 07:00 UTC
@@ -366,13 +375,34 @@ jobs:
           echo "Memory: $(free -h 2>/dev/null || vm_stat 2>/dev/null | head -5 || echo 'N/A')"
           echo "Disk: $(df -h . | tail -1)"
           echo ""
-          echo "=== Training 5-day model ==="
-          time python models/train.py --retrain --fast
+          
+          # Determine training mode
+          # Scheduled runs use 'balanced' mode (good quality, reasonable time)
+          # Manual triggers can choose: fast (4s), balanced (24s), or full (2min)
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            TRAIN_MODE="balanced"
+          else
+            TRAIN_MODE="${{ github.event.inputs.training_mode || 'balanced' }}"
+          fi
+          echo "Training mode: $TRAIN_MODE"
+          
+          # Set training flags based on mode
+          if [ "$TRAIN_MODE" == "fast" ]; then
+            TRAIN_FLAGS="--fast"
+          elif [ "$TRAIN_MODE" == "balanced" ]; then
+            TRAIN_FLAGS="--balanced"
+          else
+            TRAIN_FLAGS=""  # full mode - no flags
+          fi
+          
+          echo ""
+          echo "=== Training 5-day model ($TRAIN_MODE mode) ==="
+          time python models/train.py --retrain $TRAIN_FLAGS
           echo "✅ 5-day model trained"
           ls -la models/*.pkl models/*.txt 2>/dev/null || echo "Model files:"
           echo ""
-          echo "=== Training 15-day model ==="
-          time python models/train_15d.py --fast
+          echo "=== Training 15-day model ($TRAIN_MODE mode) ==="
+          time python models/train_15d.py $TRAIN_FLAGS
           echo "✅ 15-day model trained"
           ls -la models/*.pkl models/*.txt 2>/dev/null || echo "Model files:"
           echo ""

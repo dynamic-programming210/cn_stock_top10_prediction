@@ -89,14 +89,16 @@ class TwoStageModel:
     def train(self, df: pd.DataFrame, 
               feature_cols: List[str] = None,
               validation_split: float = 0.2,
-              fast_mode: bool = False) -> dict:
+              fast_mode: bool = False,
+              balanced_mode: bool = False) -> dict:
         """Train both ranker and regressor
         
         Args:
             df: Training data
             feature_cols: Feature columns to use
             validation_split: Fraction for validation
-            fast_mode: If True, use faster model settings (fewer trees, shallower, sample data)
+            fast_mode: If True, use fastest settings (CI quick iteration)
+            balanced_mode: If True, use balanced settings (good quality, reasonable time)
         """
         from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingRegressor
         
@@ -104,20 +106,30 @@ class TwoStageModel:
         # HistGradientBoostingRegressor is much faster than GradientBoostingRegressor
         use_xgboost = False
         
-        # Model parameters based on fast_mode
+        # Model parameters based on mode
+        # Based on benchmark: fast=4s, balanced=24s, full=2min
+        # Performance: fast=0.7%, balanced=1.5%, full=5.2% avg top10 return
         if fast_mode:
-            rf_n_estimators = 20  # Reduced from 30
-            rf_max_depth = 5      # Reduced from 6
-            gb_n_estimators = 20  # Reduced from 30
+            rf_n_estimators = 20
+            rf_max_depth = 5
+            gb_n_estimators = 20
             gb_max_depth = 3
-            max_train_samples = 500000  # Sample data for CI speed
-            logger.info("FAST MODE: Using reduced model complexity and sampling")
+            max_train_samples = 500000
+            logger.info("FAST MODE: 20 trees, depth 5, 500k samples (~4s)")
+        elif balanced_mode:
+            rf_n_estimators = 50
+            rf_max_depth = 7
+            gb_n_estimators = 50
+            gb_max_depth = 4
+            max_train_samples = 1000000
+            logger.info("BALANCED MODE: 50 trees, depth 7, 1M samples (~24s)")
         else:
             rf_n_estimators = 100
             rf_max_depth = 10
             gb_n_estimators = 100
             gb_max_depth = 5
             max_train_samples = None  # Use all data
+            logger.info("FULL MODE: 100 trees, depth 10, all data (~2min)")
         
         # Set feature columns
         self.feature_cols = feature_cols or [c for c in FEATURE_COLS if c in df.columns]
@@ -413,13 +425,16 @@ class TwoStageModel:
 
 def train_model(df: pd.DataFrame = None, 
                 features_file: str = None,
-                fast_mode: bool = False) -> TwoStageModel:
+                fast_mode: bool = False,
+                balanced_mode: bool = False) -> TwoStageModel:
     """Train the two-stage model
     
     Args:
         df: Features dataframe (optional, will load from file if not provided)
         features_file: Path to features file (optional)
-        fast_mode: If True, use fewer estimators for faster training (CI mode)
+        fast_mode: If True, fastest training (~4s, lower quality)
+        balanced_mode: If True, balanced training (~24s, good quality)
+        (neither = full mode, ~2min, best quality)
     """
     if df is None:
         features_file = features_file or FEATURES_Z_FILE
@@ -427,7 +442,7 @@ def train_model(df: pd.DataFrame = None,
         df = pd.read_parquet(features_file)
     
     model = TwoStageModel()
-    metrics = model.train(df, fast_mode=fast_mode)
+    metrics = model.train(df, fast_mode=fast_mode, balanced_mode=balanced_mode)
     
     # Save
     model.save()
@@ -548,8 +563,15 @@ if __name__ == "__main__":
     parser.add_argument('--features', type=str, default=None, help="Path to features file")
     parser.add_argument('--retrain', action='store_true', help="Force retrain the model")
     parser.add_argument('--fast', action='store_true', help="Fast mode with fewer estimators (for CI)")
+    parser.add_argument('--balanced', action='store_true', help="Balanced mode (50 trees, 1M samples) - good trade-off")
     
     args = parser.parse_args()
     
-    model = train_model(features_file=args.features, fast_mode=args.fast)
-    print("Model training complete!")
+    # Determine mode (fast takes precedence, then balanced, then full)
+    fast_mode = args.fast
+    balanced_mode = args.balanced and not args.fast
+    
+    model = train_model(features_file=args.features, fast_mode=fast_mode, balanced_mode=balanced_mode)
+    
+    mode_name = "fast" if fast_mode else ("balanced" if balanced_mode else "full")
+    print(f"Model training complete! (mode: {mode_name})")

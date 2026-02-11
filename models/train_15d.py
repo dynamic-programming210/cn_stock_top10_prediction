@@ -86,24 +86,39 @@ class TwoStageModel15D:
     def train(self, df: pd.DataFrame, 
               feature_cols: List[str] = None,
               validation_split: float = 0.2,
-              fast_mode: bool = False) -> dict:
-        """Train both ranker and regressor for 15-day horizon"""
+              fast_mode: bool = False,
+              balanced_mode: bool = False) -> dict:
+        """Train both ranker and regressor for 15-day horizon
+        
+        Args:
+            fast_mode: Fastest, 20 trees, 500K samples (~5-10s)
+            balanced_mode: Good trade-off, 50 trees, 1M samples (~20-30s)
+            Default (neither): Full training, 100 trees, all data (~2min)
+        """
         from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingRegressor
         
-        # Model parameters based on fast_mode
+        # Model parameters based on mode
         if fast_mode:
-            rf_n_estimators = 20  # Reduced for CI speed
+            rf_n_estimators = 20
             rf_max_depth = 5
             gb_n_estimators = 20
             gb_max_depth = 3
-            max_train_samples = 500000  # Sample data for CI speed
-            logger.info("FAST MODE: Using reduced model complexity and sampling")
+            max_train_samples = 500000
+            logger.info("FAST MODE: Using reduced model complexity and sampling (20 trees, 500K samples)")
+        elif balanced_mode:
+            rf_n_estimators = 50
+            rf_max_depth = 7
+            gb_n_estimators = 50
+            gb_max_depth = 4
+            max_train_samples = 1000000
+            logger.info("BALANCED MODE: Using moderate complexity (50 trees, 1M samples)")
         else:
             rf_n_estimators = 100
             rf_max_depth = 10
             gb_n_estimators = 100
             gb_max_depth = 5
             max_train_samples = None
+            logger.info("FULL MODE: Using full model complexity (100 trees, all data)")
         
         # Set feature columns
         self.feature_cols = feature_cols or [c for c in FEATURE_COLS if c in df.columns]
@@ -378,15 +393,22 @@ class TwoStageModel15D:
 
 def train_model_15d(df: pd.DataFrame = None, 
                     features_file: str = None,
-                    fast_mode: bool = False) -> TwoStageModel15D:
-    """Train the two-stage model for 15-day predictions"""
+                    fast_mode: bool = False,
+                    balanced_mode: bool = False) -> TwoStageModel15D:
+    """Train the two-stage model for 15-day predictions
+    
+    Args:
+        fast_mode: Fastest training (~5-10s)
+        balanced_mode: Good trade-off (~20-30s)
+        Default: Full training (~2min)
+    """
     if df is None:
         features_file = features_file or FEATURES_Z_FILE
         logger.info(f"Loading features from {features_file}")
         df = pd.read_parquet(features_file)
     
     model = TwoStageModel15D()
-    metrics = model.train(df, fast_mode=fast_mode)
+    metrics = model.train(df, fast_mode=fast_mode, balanced_mode=balanced_mode)
     
     # Save
     model.save()
@@ -467,13 +489,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train 15-day stock prediction model")
     parser.add_argument('--features', type=str, default=None, help="Path to features file")
     parser.add_argument('--fast', action='store_true', help="Use fast mode for quick training")
+    parser.add_argument('--balanced', action='store_true', help="Balanced mode (50 trees, 1M samples) - good trade-off")
     parser.add_argument('--predict', action='store_true', help="Generate predictions after training")
     
     args = parser.parse_args()
     
+    # Determine mode (fast takes precedence, then balanced, then full)
+    fast_mode = args.fast
+    balanced_mode = args.balanced and not args.fast
+    
     # Train
-    model = train_model_15d(features_file=args.features, fast_mode=args.fast)
-    print("15D Model training complete!")
+    model = train_model_15d(features_file=args.features, fast_mode=fast_mode, balanced_mode=balanced_mode)
+    
+    mode_name = "fast" if fast_mode else ("balanced" if balanced_mode else "full")
+    print(f"15D Model training complete! (mode: {mode_name})")
     
     # Generate predictions if requested
     if args.predict:
