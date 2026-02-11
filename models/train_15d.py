@@ -104,21 +104,22 @@ class TwoStageModel15D:
             gb_n_estimators = 20
             gb_max_depth = 3
             max_train_samples = 500000
-            logger.info("FAST MODE: Using reduced model complexity and sampling (20 trees, 500K samples)")
+            logger.info("FAST MODE: 20 trees, depth 5, 500K samples (~5-10s)")
         elif balanced_mode:
             rf_n_estimators = 50
             rf_max_depth = 7
             gb_n_estimators = 50
             gb_max_depth = 4
             max_train_samples = 1000000
-            logger.info("BALANCED MODE: Using moderate complexity (50 trees, 1M samples)")
+            logger.info("BALANCED MODE: 50 trees, depth 7, 1M samples (~20-30s)")
         else:
             rf_n_estimators = 100
             rf_max_depth = 10
             gb_n_estimators = 100
             gb_max_depth = 5
-            max_train_samples = None
-            logger.info("FULL MODE: Using full model complexity (100 trees, all data)")
+            # Cap at 2M samples to prevent GitHub Actions timeout
+            max_train_samples = 2000000
+            logger.info("FULL MODE: 100 trees, depth 10, 2M samples (~2-3min)")
         
         # Set feature columns
         self.feature_cols = feature_cols or [c for c in FEATURE_COLS if c in df.columns]

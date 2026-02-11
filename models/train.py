@@ -128,8 +128,10 @@ class TwoStageModel:
             rf_max_depth = 10
             gb_n_estimators = 100
             gb_max_depth = 5
-            max_train_samples = None  # Use all data
-            logger.info("FULL MODE: 100 trees, depth 10, all data (~2min)")
+            # Cap at 2M samples to prevent GitHub Actions timeout
+            # 3.3M samples with 100 trees takes too long on shared runners
+            max_train_samples = 2000000
+            logger.info("FULL MODE: 100 trees, depth 10, 2M samples (~2-3min)")
         
         # Set feature columns
         self.feature_cols = feature_cols or [c for c in FEATURE_COLS if c in df.columns]
