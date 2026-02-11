@@ -137,35 +137,53 @@ class StockWatcher:
         self.model_15d = None
         self.ranker_5d = None
         self.ranker_15d = None
+        self.feature_cols_5d = None  # Store feature columns from model
+        self.feature_cols_15d = None
         self.features_df = None
         self.bars_df = None
         
     def load_models(self):
-        """Load prediction models - models are stored as dicts with 'model' key"""
+        """Load prediction models - models are stored as dicts with 'model' and 'feature_cols' keys"""
         
         if RANKER_MODEL_FILE.exists():
             with open(RANKER_MODEL_FILE, 'rb') as f:
                 data = pickle.load(f)
                 self.ranker_5d = data['model'] if isinstance(data, dict) and 'model' in data else data
-            logger.info("Loaded 5-day ranker")
+                if isinstance(data, dict) and 'feature_cols' in data:
+                    self.feature_cols_5d = data['feature_cols']
+            logger.info(f"Loaded 5-day ranker (features: {len(self.feature_cols_5d) if self.feature_cols_5d else 'N/A'})")
             
         if REGRESSOR_MODEL_FILE.exists():
             with open(REGRESSOR_MODEL_FILE, 'rb') as f:
                 data = pickle.load(f)
                 self.model_5d = data['model'] if isinstance(data, dict) and 'model' in data else data
-            logger.info("Loaded 5-day regressor")
+                if isinstance(data, dict) and 'feature_cols' in data:
+                    self.feature_cols_5d = data['feature_cols']  # Use regressor's feature_cols if available
+            logger.info(f"Loaded 5-day regressor (features: {len(self.feature_cols_5d) if self.feature_cols_5d else 'N/A'})")
             
         if RANKER_15D_MODEL_FILE.exists():
             with open(RANKER_15D_MODEL_FILE, 'rb') as f:
                 data = pickle.load(f)
                 self.ranker_15d = data['model'] if isinstance(data, dict) and 'model' in data else data
-            logger.info("Loaded 15-day ranker")
+                if isinstance(data, dict) and 'feature_cols' in data:
+                    self.feature_cols_15d = data['feature_cols']
+            logger.info(f"Loaded 15-day ranker (features: {len(self.feature_cols_15d) if self.feature_cols_15d else 'N/A'})")
             
         if REGRESSOR_15D_MODEL_FILE.exists():
             with open(REGRESSOR_15D_MODEL_FILE, 'rb') as f:
                 data = pickle.load(f)
                 self.model_15d = data['model'] if isinstance(data, dict) and 'model' in data else data
-            logger.info("Loaded 15-day regressor")
+                if isinstance(data, dict) and 'feature_cols' in data:
+                    self.feature_cols_15d = data['feature_cols']
+            logger.info(f"Loaded 15-day regressor (features: {len(self.feature_cols_15d) if self.feature_cols_15d else 'N/A'})")
+        
+        # Fallback to FEATURE_COLS if model doesn't store feature columns
+        if self.feature_cols_5d is None:
+            self.feature_cols_5d = FEATURE_COLS
+            logger.warning("Using FEATURE_COLS from config for 5-day model")
+        if self.feature_cols_15d is None:
+            self.feature_cols_15d = FEATURE_COLS
+            logger.warning("Using FEATURE_COLS from config for 15-day model")
     
     def load_data(self):
         """Load features and bars data"""
@@ -204,20 +222,40 @@ class StockWatcher:
             return None
         
         stock_row = stock_features.iloc[0]
-        available_cols = [c for c in FEATURE_COLS if c in stock_features.columns]
-        X = stock_features[available_cols].values
+        
+        # Use model's stored feature columns, not FEATURE_COLS from config
+        # This ensures we use the same features the model was trained with
+        available_cols_5d = [c for c in self.feature_cols_5d if c in stock_features.columns]
+        available_cols_15d = [c for c in self.feature_cols_15d if c in stock_features.columns]
+        
+        # Check for feature column mismatch
+        if len(available_cols_5d) != len(self.feature_cols_5d):
+            missing = set(self.feature_cols_5d) - set(available_cols_5d)
+            logger.warning(f"{symbol}: Missing 5d features: {missing}")
+        if len(available_cols_15d) != len(self.feature_cols_15d):
+            missing = set(self.feature_cols_15d) - set(available_cols_15d)
+            logger.warning(f"{symbol}: Missing 15d features: {missing}")
+        
+        X_5d = stock_features[available_cols_5d].fillna(0).values
+        X_15d = stock_features[available_cols_15d].fillna(0).values
         
         pred_ret_5, pred_ret_15 = 0.0, 0.0
         rank_5, rank_15 = 0.5, 0.5
         
-        if self.model_5d:
-            pred_ret_5 = float(self.model_5d.predict(X)[0])
-        if self.model_15d:
-            pred_ret_15 = float(self.model_15d.predict(X)[0])
-        if self.ranker_5d:
-            rank_5 = float(self.ranker_5d.predict_proba(X)[0][1]) if hasattr(self.ranker_5d, "predict_proba") else 0.5
-        if self.ranker_15d:
-            rank_15 = float(self.ranker_15d.predict_proba(X)[0][1]) if hasattr(self.ranker_15d, "predict_proba") else 0.5
+        if self.model_5d and len(available_cols_5d) == len(self.feature_cols_5d):
+            pred_ret_5 = float(self.model_5d.predict(X_5d)[0])
+        elif self.model_5d:
+            logger.warning(f"{symbol}: Skipping 5d prediction due to feature mismatch")
+            
+        if self.model_15d and len(available_cols_15d) == len(self.feature_cols_15d):
+            pred_ret_15 = float(self.model_15d.predict(X_15d)[0])
+        elif self.model_15d:
+            logger.warning(f"{symbol}: Skipping 15d prediction due to feature mismatch")
+            
+        if self.ranker_5d and len(available_cols_5d) == len(self.feature_cols_5d):
+            rank_5 = float(self.ranker_5d.predict_proba(X_5d)[0][-1]) if hasattr(self.ranker_5d, "predict_proba") else 0.5
+        if self.ranker_15d and len(available_cols_15d) == len(self.feature_cols_15d):
+            rank_15 = float(self.ranker_15d.predict_proba(X_15d)[0][-1]) if hasattr(self.ranker_15d, "predict_proba") else 0.5
         
         current_price = float(stock_row.get("close", stock_row.get("adj_close", 0)))
         vol = float(stock_row.get("vol_5", 0.03))

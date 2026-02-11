@@ -42,7 +42,6 @@ data/features.parquet
 data/feat_z.parquet
 
 # Test files
-test_*.py
 calc_stats.py
 
 # Logs
