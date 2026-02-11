@@ -313,14 +313,37 @@ class TwoStageModel:
         
         df = df.copy()
         
-        # Ensure feature columns are present
-        missing = set(self.feature_cols) - set(df.columns)
-        if missing:
-            raise ValueError(f"Missing feature columns: {missing}")
+        # Separate core features from feedback features
+        # Feedback features (hist_pred_bias_*, hist_dir_acc_*) are dynamic and may not be in features file
+        feedback_feat_prefixes = ('hist_pred_bias_', 'hist_dir_acc_')
+        core_feature_cols = [c for c in self.feature_cols if not c.startswith(feedback_feat_prefixes)]
+        feedback_feature_cols = [c for c in self.feature_cols if c.startswith(feedback_feat_prefixes)]
+        
+        # Ensure core feature columns are present (required)
+        missing_core = set(core_feature_cols) - set(df.columns)
+        if missing_core:
+            raise ValueError(f"Missing core feature columns: {missing_core}")
+        
+        # For feedback features: try to add them dynamically if not present
+        if feedback_feature_cols:
+            missing_feedback = set(feedback_feature_cols) - set(df.columns)
+            if missing_feedback:
+                try:
+                    from models.prediction_feedback import add_feedback_features, FEEDBACK_STATS_FILE
+                    if FEEDBACK_STATS_FILE.exists():
+                        df = add_feedback_features(df)
+                        logger.info(f"Added {len(missing_feedback)} feedback features for prediction")
+                except Exception as e:
+                    logger.warning(f"Could not add feedback features: {e}")
+                
+                # Fill any still-missing feedback features with 0 (neutral)
+                for col in missing_feedback:
+                    if col not in df.columns:
+                        df[col] = 0.0
+                        logger.info(f"Filled missing feedback feature '{col}' with 0")
         
         # Handle NaN values - only predict for rows with complete features
-        feature_cols_present = [c for c in self.feature_cols if c in df.columns]
-        mask_valid = df[feature_cols_present].notna().all(axis=1)
+        mask_valid = df[self.feature_cols].notna().all(axis=1)
         
         # Initialize output columns with NaN
         df['rank_score'] = np.nan

@@ -251,14 +251,24 @@ class TwoStageModel15D:
         
         df = df.copy()
         
-        # Ensure feature columns are present
-        missing = set(self.feature_cols) - set(df.columns)
-        if missing:
-            raise ValueError(f"Missing feature columns: {missing}")
+        # Separate core features from feedback features (for future compatibility)
+        feedback_feat_prefixes = ('hist_pred_bias_', 'hist_dir_acc_')
+        core_feature_cols = [c for c in self.feature_cols if not c.startswith(feedback_feat_prefixes)]
+        feedback_feature_cols = [c for c in self.feature_cols if c.startswith(feedback_feat_prefixes)]
+        
+        # Ensure core feature columns are present (required)
+        missing_core = set(core_feature_cols) - set(df.columns)
+        if missing_core:
+            raise ValueError(f"Missing core feature columns: {missing_core}")
+        
+        # Fill any missing feedback features with 0 (neutral)
+        for col in feedback_feature_cols:
+            if col not in df.columns:
+                df[col] = 0.0
+                logger.info(f"Filled missing feedback feature '{col}' with 0")
         
         # Handle NaN values
-        feature_cols_present = [c for c in self.feature_cols if c in df.columns]
-        mask_valid = df[feature_cols_present].notna().all(axis=1)
+        mask_valid = df[self.feature_cols].notna().all(axis=1)
         
         # Initialize output columns with NaN
         df['rank_score_15d'] = np.nan
