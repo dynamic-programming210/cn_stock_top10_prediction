@@ -90,7 +90,8 @@ class TwoStageModel:
               feature_cols: List[str] = None,
               validation_split: float = 0.2,
               fast_mode: bool = False,
-              balanced_mode: bool = False) -> dict:
+              balanced_mode: bool = False,
+              use_feedback: bool = True) -> dict:
         """Train both ranker and regressor
         
         Args:
@@ -99,6 +100,7 @@ class TwoStageModel:
             validation_split: Fraction for validation
             fast_mode: If True, use fastest settings (CI quick iteration)
             balanced_mode: If True, use balanced settings (good quality, reasonable time)
+            use_feedback: If True, incorporate prediction feedback into training
         """
         from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingRegressor
         
@@ -148,6 +150,35 @@ class TwoStageModel:
             logger.info(f"Sampling {max_train_samples} from {len(clean)} rows for fast training")
             clean = clean.sample(n=max_train_samples, random_state=42)
         
+        # Apply prediction feedback if available
+        feedback_weights = None
+        if use_feedback:
+            try:
+                from models.prediction_feedback import (
+                    add_feedback_features, 
+                    compute_feedback_sample_weights,
+                    FEEDBACK_FILE, FEEDBACK_STATS_FILE
+                )
+                
+                # Add feedback-based features if available
+                if FEEDBACK_STATS_FILE.exists():
+                    clean = add_feedback_features(clean)
+                    # Update feature columns to include new feedback features
+                    new_feat_cols = [c for c in ['hist_pred_bias_5d', 'hist_pred_bias_15d', 
+                                                  'hist_dir_acc_5d', 'hist_dir_acc_15d'] 
+                                     if c in clean.columns]
+                    if new_feat_cols:
+                        self.feature_cols = self.feature_cols + new_feat_cols
+                        logger.info(f"Added {len(new_feat_cols)} feedback features: {new_feat_cols}")
+                
+                # Compute sample weights based on past prediction errors
+                if FEEDBACK_FILE.exists():
+                    feedback_weights = compute_feedback_sample_weights(clean)
+                    logger.info("Using prediction feedback for sample weighting")
+                    
+            except Exception as e:
+                logger.warning(f"Could not apply feedback: {e}")
+        
         logger.info(f"Training on {len(clean)} samples, {clean['symbol'].nunique()} symbols")
         
         # Split by date
@@ -166,6 +197,15 @@ class TwoStageModel:
         
         X_train, y_train, train_weights = self._prepare_ranking_data(train_df)
         X_val, y_val, _ = self._prepare_ranking_data(val_df)
+        
+        # Combine signal-based weights with feedback-based weights
+        if feedback_weights is not None:
+            # Get feedback weights for training samples only
+            train_indices = clean[clean['date'].isin(train_dates)].index
+            train_feedback_weights = feedback_weights[clean.index.isin(train_indices)]
+            if len(train_feedback_weights) == len(train_weights):
+                train_weights = train_weights * train_feedback_weights
+                logger.info(f"Combined feedback weights - Mean: {train_weights.mean():.2f}, Max: {train_weights.max():.2f}")
         
         logger.info(f"Sample weights - Mean: {train_weights.mean():.2f}, Max: {train_weights.max():.2f}, "
                     f"Boosted samples: {(train_weights > 1).sum()} ({100*(train_weights > 1).mean():.1f}%)")
@@ -428,7 +468,8 @@ class TwoStageModel:
 def train_model(df: pd.DataFrame = None, 
                 features_file: str = None,
                 fast_mode: bool = False,
-                balanced_mode: bool = False) -> TwoStageModel:
+                balanced_mode: bool = False,
+                use_feedback: bool = True) -> TwoStageModel:
     """Train the two-stage model
     
     Args:
@@ -436,6 +477,7 @@ def train_model(df: pd.DataFrame = None,
         features_file: Path to features file (optional)
         fast_mode: If True, fastest training (~4s, lower quality)
         balanced_mode: If True, balanced training (~24s, good quality)
+        use_feedback: If True, use prediction feedback for training
         (neither = full mode, ~2min, best quality)
     """
     if df is None:
@@ -444,7 +486,7 @@ def train_model(df: pd.DataFrame = None,
         df = pd.read_parquet(features_file)
     
     model = TwoStageModel()
-    metrics = model.train(df, fast_mode=fast_mode, balanced_mode=balanced_mode)
+    metrics = model.train(df, fast_mode=fast_mode, balanced_mode=balanced_mode, use_feedback=use_feedback)
     
     # Save
     model.save()
@@ -566,14 +608,18 @@ if __name__ == "__main__":
     parser.add_argument('--retrain', action='store_true', help="Force retrain the model")
     parser.add_argument('--fast', action='store_true', help="Fast mode with fewer estimators (for CI)")
     parser.add_argument('--balanced', action='store_true', help="Balanced mode (50 trees, 1M samples) - good trade-off")
+    parser.add_argument('--no-feedback', action='store_true', help="Disable prediction feedback learning")
     
     args = parser.parse_args()
     
     # Determine mode (fast takes precedence, then balanced, then full)
     fast_mode = args.fast
     balanced_mode = args.balanced and not args.fast
+    use_feedback = not args.no_feedback
     
-    model = train_model(features_file=args.features, fast_mode=fast_mode, balanced_mode=balanced_mode)
+    model = train_model(features_file=args.features, fast_mode=fast_mode, balanced_mode=balanced_mode,
+                        use_feedback=use_feedback)
     
     mode_name = "fast" if fast_mode else ("balanced" if balanced_mode else "full")
-    print(f"Model training complete! (mode: {mode_name})")
+    feedback_str = " with feedback" if use_feedback else " without feedback"
+    print(f"Model training complete! (mode: {mode_name}{feedback_str})")

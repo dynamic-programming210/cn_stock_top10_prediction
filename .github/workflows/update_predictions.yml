@@ -366,6 +366,22 @@ jobs:
           echo "🔧 Building features..."
           python features/build_features.py
       
+      - name: Build prediction feedback
+        run: |
+          echo "📊 Building prediction feedback from history..."
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from models.prediction_feedback import build_feedback_dataset, compute_stock_feedback_stats, generate_feedback_report
+          
+          feedback = build_feedback_dataset()
+          if not feedback.empty:
+              stats = compute_stock_feedback_stats(feedback)
+              print(generate_feedback_report())
+          else:
+              print('No feedback data yet - model will train without feedback')
+          "
+      
       - name: Train model (if requested)
         if: ${{ github.event.inputs.retrain_model == 'true' || github.event_name == 'schedule' }}
         run: |
