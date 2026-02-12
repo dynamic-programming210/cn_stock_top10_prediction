@@ -225,36 +225,52 @@ class StockWatcher:
         
         # Use model's stored feature columns, not FEATURE_COLS from config
         # This ensures we use the same features the model was trained with
-        available_cols_5d = [c for c in self.feature_cols_5d if c in stock_features.columns]
-        available_cols_15d = [c for c in self.feature_cols_15d if c in stock_features.columns]
+        # Separate feedback features (hist_*) from core features - feedback features can be filled with 0
+        feedback_prefixes = ('hist_pred_bias_', 'hist_dir_acc_')
         
-        # Check for feature column mismatch
-        if len(available_cols_5d) != len(self.feature_cols_5d):
-            missing = set(self.feature_cols_5d) - set(available_cols_5d)
-            logger.warning(f"{symbol}: Missing 5d features: {missing}")
-        if len(available_cols_15d) != len(self.feature_cols_15d):
-            missing = set(self.feature_cols_15d) - set(available_cols_15d)
-            logger.warning(f"{symbol}: Missing 15d features: {missing}")
+        core_cols_5d = [c for c in self.feature_cols_5d if not c.startswith(feedback_prefixes)]
+        feedback_cols_5d = [c for c in self.feature_cols_5d if c.startswith(feedback_prefixes)]
+        core_cols_15d = [c for c in self.feature_cols_15d if not c.startswith(feedback_prefixes)]
+        feedback_cols_15d = [c for c in self.feature_cols_15d if c.startswith(feedback_prefixes)]
         
-        X_5d = stock_features[available_cols_5d].fillna(0).values
-        X_15d = stock_features[available_cols_15d].fillna(0).values
+        # Check for missing CORE features only (feedback features can be filled with 0)
+        available_core_5d = [c for c in core_cols_5d if c in stock_features.columns]
+        available_core_15d = [c for c in core_cols_15d if c in stock_features.columns]
+        
+        missing_core_5d = set(core_cols_5d) - set(available_core_5d)
+        missing_core_15d = set(core_cols_15d) - set(available_core_15d)
+        
+        if missing_core_5d:
+            logger.warning(f"{symbol}: Missing core 5d features: {missing_core_5d}")
+        if missing_core_15d:
+            logger.warning(f"{symbol}: Missing core 15d features: {missing_core_15d}")
+        
+        # Build feature arrays - fill missing feedback features with 0
+        stock_features_copy = stock_features.copy()
+        for col in feedback_cols_5d + feedback_cols_15d:
+            if col not in stock_features_copy.columns:
+                stock_features_copy[col] = 0.0
+        
+        X_5d = stock_features_copy[self.feature_cols_5d].fillna(0).values
+        X_15d = stock_features_copy[self.feature_cols_15d].fillna(0).values
         
         pred_ret_5, pred_ret_15 = 0.0, 0.0
         rank_5, rank_15 = 0.5, 0.5
         
-        if self.model_5d and len(available_cols_5d) == len(self.feature_cols_5d):
+        # Predict if we have all core features (feedback features are optional)
+        if self.model_5d and not missing_core_5d:
             pred_ret_5 = float(self.model_5d.predict(X_5d)[0])
-        elif self.model_5d:
-            logger.warning(f"{symbol}: Skipping 5d prediction due to feature mismatch")
+        elif self.model_5d and missing_core_5d:
+            logger.warning(f"{symbol}: Skipping 5d prediction due to missing core features")
             
-        if self.model_15d and len(available_cols_15d) == len(self.feature_cols_15d):
+        if self.model_15d and not missing_core_15d:
             pred_ret_15 = float(self.model_15d.predict(X_15d)[0])
-        elif self.model_15d:
-            logger.warning(f"{symbol}: Skipping 15d prediction due to feature mismatch")
+        elif self.model_15d and missing_core_15d:
+            logger.warning(f"{symbol}: Skipping 15d prediction due to missing core features")
             
-        if self.ranker_5d and len(available_cols_5d) == len(self.feature_cols_5d):
+        if self.ranker_5d and not missing_core_5d:
             rank_5 = float(self.ranker_5d.predict_proba(X_5d)[0][-1]) if hasattr(self.ranker_5d, "predict_proba") else 0.5
-        if self.ranker_15d and len(available_cols_15d) == len(self.feature_cols_15d):
+        if self.ranker_15d and not missing_core_15d:
             rank_15 = float(self.ranker_15d.predict_proba(X_15d)[0][-1]) if hasattr(self.ranker_15d, "predict_proba") else 0.5
         
         current_price = float(stock_row.get("close", stock_row.get("adj_close", 0)))
