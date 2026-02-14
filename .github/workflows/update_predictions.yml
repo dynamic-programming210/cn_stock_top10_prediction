@@ -7,7 +7,7 @@ on:
       full_refresh:
         description: 'Full data refresh (fetch all history)'
         required: false
-        default: 'false'
+        default: 'true'
         type: boolean
       retrain_model:
         description: 'Retrain the model'
@@ -22,7 +22,7 @@ on:
       training_mode:
         description: 'Training mode (fast=4s, balanced=24s, full=2min)'
         required: false
-        default: 'balanced'
+        default: 'full'
         type: choice
         options:
           - fast
