@@ -58,7 +58,7 @@ jobs:
   # ==========================================================
   fetch-data-shg:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.full_refresh == 'true' }}
+    if: ${{ github.event.inputs.full_refresh == 'true' || github.event_name == 'schedule' }}
     outputs:
       has_data: ${{ steps.fetch.outputs.has_data }}
     steps:
@@ -118,7 +118,7 @@ jobs:
 
   fetch-data-she:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.full_refresh == 'true' }}
+    if: ${{ github.event.inputs.full_refresh == 'true' || github.event_name == 'schedule' }}
     outputs:
       has_data: ${{ steps.fetch.outputs.has_data }}
     steps:
@@ -182,7 +182,7 @@ jobs:
   merge-data:
     runs-on: ubuntu-latest
     needs: [fetch-data-shg, fetch-data-she]
-    if: ${{ always() && github.event.inputs.full_refresh == 'true' && (needs.fetch-data-shg.result == 'success' || needs.fetch-data-she.result == 'success') }}
+    if: ${{ always() && (github.event.inputs.full_refresh == 'true' || github.event_name == 'schedule') && (needs.fetch-data-shg.result == 'success' || needs.fetch-data-she.result == 'success') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -243,7 +243,7 @@ jobs:
   # ==========================================================
   fetch-incremental:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.full_refresh != 'true' }}
+    if: ${{ github.event.inputs.full_refresh != 'true' && github.event_name != 'schedule' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -393,12 +393,12 @@ jobs:
           echo ""
           
           # Determine training mode
-          # Scheduled runs use 'balanced' mode (good quality, reasonable time)
+          # Both scheduled runs and manual triggers use full mode by default
           # Manual triggers can choose: fast (4s), balanced (24s), or full (2min)
           if [ "${{ github.event_name }}" == "schedule" ]; then
-            TRAIN_MODE="balanced"
+            TRAIN_MODE="full"
           else
-            TRAIN_MODE="${{ github.event.inputs.training_mode || 'balanced' }}"
+            TRAIN_MODE="${{ github.event.inputs.training_mode || 'full' }}"
           fi
           echo "Training mode: $TRAIN_MODE"
           
