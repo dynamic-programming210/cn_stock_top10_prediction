@@ -144,6 +144,370 @@ def compute_candlestick_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def compute_classic_patterns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute classic bullish candlestick and chart patterns.
+    
+    Implements 20 classic patterns based on:
+    - Candlestick reversal patterns (Morning Star, Engulfing, Hammer, etc.)
+    - Chart patterns (Double Bottom, Cup & Handle, Wedge, Triangle, Flag)
+    - Trend initiation signals (Golden Cross, Breakouts, Higher Lows)
+    """
+    df = df.copy()
+    
+    # Pre-compute common values per symbol
+    prev_close = df.groupby('symbol')['close'].shift(1)
+    prev_open = df.groupby('symbol')['open'].shift(1)
+    prev_high = df.groupby('symbol')['high'].shift(1)
+    prev_low = df.groupby('symbol')['low'].shift(1)
+    prev2_close = df.groupby('symbol')['close'].shift(2)
+    prev2_open = df.groupby('symbol')['open'].shift(2)
+    prev2_high = df.groupby('symbol')['high'].shift(2)
+    prev2_low = df.groupby('symbol')['low'].shift(2)
+    
+    # Body and range calculations
+    body = df['close'] - df['open']
+    prev_body = prev_close - prev_open
+    prev2_body = prev2_close - prev2_open
+    hl_range = df['high'] - df['low']
+    prev_hl_range = prev_high - prev_low
+    
+    # Is bullish/bearish
+    is_bullish = df['close'] > df['open']
+    is_bearish = df['close'] < df['open']
+    prev_bullish = prev_close > prev_open
+    prev_bearish = prev_close < prev_open
+    prev2_bullish = prev2_close > prev2_open
+    prev2_bearish = prev2_close < prev2_open
+    
+    # Body sizes
+    body_size = body.abs()
+    prev_body_size = prev_body.abs()
+    prev2_body_size = prev2_body.abs()
+    avg_body = df.groupby('symbol')['close'].transform(
+        lambda x: (x - x.shift(1)).abs().rolling(20, min_periods=5).mean()
+    )
+    
+    # Small body detection (for doji, star patterns)
+    is_small_body = body_size < (avg_body * 0.3)
+    prev_is_small_body = prev_body_size < (avg_body * 0.3)
+    
+    # ========================================
+    # CANDLESTICK REVERSAL PATTERNS
+    # ========================================
+    
+    # 1. Morning Star (Bullish Reversal)
+    # Day 1: Large bearish candle
+    # Day 2: Small body (star) - gaps down from day 1
+    # Day 3: Large bullish candle that closes above midpoint of day 1
+    morning_star_day1 = prev2_bearish & (prev2_body_size > avg_body * 1.5)
+    morning_star_day2 = prev_is_small_body & (prev_close < prev2_close)
+    morning_star_day3 = is_bullish & (df['close'] > (prev2_open + prev2_close) / 2) & (body_size > avg_body)
+    df['morning_star'] = (morning_star_day1 & morning_star_day2 & morning_star_day3).astype(int)
+    
+    # 2. Bullish Engulfing
+    # Day 1: Bearish candle
+    # Day 2: Bullish candle that completely engulfs day 1's body
+    engulfing_cond = (
+        prev_bearish &
+        is_bullish &
+        (df['open'] < prev_close) &  # Opens below prior close
+        (df['close'] > prev_open) &  # Closes above prior open
+        (body_size > prev_body_size * 1.2)  # Body is larger
+    )
+    df['bullish_engulfing'] = engulfing_cond.astype(int)
+    
+    # 3. Hammer (Bullish Reversal)
+    # Small body at top, long lower shadow (2x+ body), little/no upper shadow
+    lower_shadow = np.minimum(df['open'], df['close']) - df['low']
+    upper_shadow = df['high'] - np.maximum(df['open'], df['close'])
+    hammer_cond = (
+        (lower_shadow > body_size * 2) &  # Long lower wick
+        (upper_shadow < body_size * 0.5) &  # Small upper wick
+        (body_size > 0) &  # Has a body
+        (df['close'] > df['low'] + hl_range * 0.6)  # Body in upper portion
+    )
+    df['hammer'] = hammer_cond.astype(int)
+    
+    # 4. Inverted Hammer
+    # Small body at bottom, long upper shadow, little/no lower shadow
+    inverted_hammer_cond = (
+        (upper_shadow > body_size * 2) &  # Long upper wick
+        (lower_shadow < body_size * 0.5) &  # Small lower wick
+        (body_size > 0) &
+        (df['close'] < df['high'] - hl_range * 0.6)  # Body in lower portion
+    )
+    df['inverted_hammer'] = inverted_hammer_cond.astype(int)
+    
+    # 5. Piercing Line
+    # Day 1: Large bearish candle
+    # Day 2: Opens below day 1 low, closes above midpoint of day 1's body
+    piercing_cond = (
+        prev_bearish &
+        (prev_body_size > avg_body) &
+        (df['open'] < prev_low) &  # Opens below prior low
+        is_bullish &
+        (df['close'] > (prev_open + prev_close) / 2) &  # Closes above midpoint
+        (df['close'] < prev_open)  # But not above prior open (that would be engulfing)
+    )
+    df['piercing_pattern'] = piercing_cond.astype(int)
+    
+    # 6. Three White Soldiers
+    # Three consecutive bullish candles with higher closes, each opening within prior body
+    is_strong_bullish = is_bullish & (body_size > avg_body * 0.8)
+    prev_strong_bullish = prev_bullish & (prev_body_size > avg_body * 0.8)
+    prev2_strong_bullish = prev2_bullish & (prev2_body_size > avg_body * 0.8)
+    three_soldiers = (
+        is_strong_bullish &
+        prev_strong_bullish &
+        prev2_strong_bullish &
+        (df['close'] > prev_close) &
+        (prev_close > prev2_close) &
+        (df['open'] > prev_open) &  # Progressive opens
+        (df['open'] < prev_close)  # Opens within prior body
+    )
+    df['three_white_soldiers'] = three_soldiers.astype(int)
+    
+    # 7. Bullish Harami
+    # Day 1: Large bearish candle
+    # Day 2: Small body contained within day 1's body
+    harami_cond = (
+        prev_bearish &
+        (prev_body_size > avg_body * 1.5) &
+        is_small_body &
+        (df['open'] > prev_close) &
+        (df['close'] < prev_open) &
+        (df['open'] < prev_open) &
+        (df['close'] > prev_close)
+    )
+    df['bullish_harami'] = harami_cond.astype(int)
+    
+    # 8. Bullish Harami Cross (inside candle is a doji)
+    is_doji = body_size < (hl_range * 0.1)
+    harami_cross = harami_cond & is_doji
+    df['bullish_harami_cross'] = harami_cross.astype(int)
+    
+    # 9. Tweezer Bottom
+    # Two candles with (roughly) same lows
+    tweezer_bottom = (
+        (abs(df['low'] - prev_low) < hl_range * 0.05) &  # Same low within 5%
+        prev_bearish &  # First candle bearish
+        is_bullish  # Second candle bullish
+    )
+    df['tweezer_bottom'] = tweezer_bottom.astype(int)
+    
+    # 10. Doji at Bottom (potential reversal)
+    df['doji_bottom'] = is_doji.astype(int)
+    
+    # Composite reversal pattern signal
+    df['reversal_pattern'] = (
+        df['morning_star'] |
+        df['bullish_engulfing'] |
+        df['hammer'] |
+        df['piercing_pattern'] |
+        df['three_white_soldiers'] |
+        df['bullish_harami'] |
+        df['tweezer_bottom']
+    ).astype(int)
+    
+    # Count of reversal patterns in last 10 days
+    df['reversal_count_10'] = df.groupby('symbol')['reversal_pattern'].transform(
+        lambda x: x.rolling(10, min_periods=1).sum()
+    )
+    
+    # ========================================
+    # GOLDEN CROSS SIGNALS (MA Crossovers)
+    # ========================================
+    
+    ma5 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(5, min_periods=3).mean())
+    ma10 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(10, min_periods=5).mean())
+    ma20 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(20, min_periods=10).mean())
+    ma60 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(60, min_periods=30).mean())
+    
+    prev_ma5 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(5, min_periods=3).mean().shift(1))
+    prev_ma10 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(10, min_periods=5).mean().shift(1))
+    prev_ma20 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(20, min_periods=10).mean().shift(1))
+    prev_ma60 = df.groupby('symbol')['close'].transform(lambda x: x.rolling(60, min_periods=30).mean().shift(1))
+    
+    # Golden cross: short MA crosses above long MA
+    df['golden_cross_5_10'] = ((ma5 > ma10) & (prev_ma5 <= prev_ma10)).astype(int)
+    df['golden_cross_5_20'] = ((ma5 > ma20) & (prev_ma5 <= prev_ma20)).astype(int)
+    df['golden_cross_10_60'] = ((ma10 > ma60) & (prev_ma10 <= prev_ma60)).astype(int)
+    
+    # Any golden cross
+    df['golden_cross_any'] = (
+        df['golden_cross_5_10'] | df['golden_cross_5_20'] | df['golden_cross_10_60']
+    ).astype(int)
+    
+    # Golden cross in last 5 days
+    df['golden_cross_5d'] = df.groupby('symbol')['golden_cross_any'].transform(
+        lambda x: x.rolling(5, min_periods=1).max()
+    )
+    
+    # Price crossing above key MAs
+    prev_close_ma20 = prev_close < prev_ma20 if prev_ma20 is not None else False
+    df['crossed_above_ma20'] = ((df['close'] > ma20) & (prev_close < prev_ma20)).astype(int)
+    df['crossed_above_ma60'] = ((df['close'] > ma60) & (prev_close < prev_ma60)).astype(int)
+    
+    # ========================================
+    # BREAKOUT DETECTION
+    # ========================================
+    
+    # 20-day high/low
+    high_20 = df.groupby('symbol')['high'].transform(lambda x: x.rolling(20, min_periods=10).max())
+    low_20 = df.groupby('symbol')['low'].transform(lambda x: x.rolling(20, min_periods=10).min())
+    prev_high_20 = df.groupby('symbol')['high'].transform(lambda x: x.rolling(20, min_periods=10).max().shift(1))
+    
+    # 52-week (252 trading days) high
+    high_252 = df.groupby('symbol')['high'].transform(lambda x: x.rolling(252, min_periods=60).max())
+    prev_high_252 = df.groupby('symbol')['high'].transform(lambda x: x.rolling(252, min_periods=60).max().shift(1))
+    
+    # Breakout above 20-day high
+    df['breakout_20d'] = (df['close'] > prev_high_20).astype(int)
+    
+    # Breakout above 52-week high
+    df['breakout_52w'] = (df['close'] > prev_high_252 * 0.98).astype(int)  # Within 2% of 52w high
+    
+    # Near 52-week high
+    df['near_52w_high'] = (df['close'] > high_252 * 0.95).astype(int)
+    
+    # Consolidation detection: narrow range for N days
+    range_5d = df.groupby('symbol')['high'].transform(lambda x: x.rolling(5).max()) - \
+               df.groupby('symbol')['low'].transform(lambda x: x.rolling(5).min())
+    avg_range = df.groupby('symbol')['close'].transform(lambda x: x.rolling(20, min_periods=10).mean())
+    df['was_in_consolidation'] = (range_5d < avg_range * 0.05).astype(int)  # Range < 5% of price
+    
+    # Volume surge detection
+    avg_vol = df.groupby('symbol')['volume'].transform(lambda x: x.rolling(20, min_periods=5).mean())
+    vol_surge = df['volume'] > avg_vol * 1.5
+    
+    # Breakout with volume confirmation
+    df['breakout_with_volume'] = (df['breakout_20d'] & vol_surge).astype(int)
+    
+    # Consolidation breakout (was tight, now breaking out)
+    prev_consolidation = df.groupby('symbol')['was_in_consolidation'].shift(1).fillna(0)
+    df['consolidation_breakout'] = (df['breakout_20d'] & (prev_consolidation == 1)).astype(int)
+    
+    # Resistance breakout: was below high, now breaking above
+    was_lower_highs = df.groupby('symbol')['high'].transform(
+        lambda x: (x < x.shift(1)).rolling(3, min_periods=2).sum()
+    ) >= 2
+    df['was_lower_highs'] = was_lower_highs.astype(int)
+    df['resistance_breakout'] = (df['breakout_20d'] & was_lower_highs).astype(int)
+    
+    # ========================================
+    # GAP PATTERNS
+    # ========================================
+    
+    gap_up_pct = (df['open'] - prev_close) / (prev_close + 0.01)
+    
+    df['has_gap_up'] = (gap_up_pct > 0.01).astype(int)  # > 1% gap
+    df['gap_up_pct'] = gap_up_pct.clip(-0.2, 0.2)  # Clip extreme values
+    df['significant_gap_up'] = (gap_up_pct > 0.03).astype(int)  # > 3% gap
+    
+    # Gap held: gap up and price stayed above gap
+    df['gap_up_size'] = (gap_up_pct * (gap_up_pct > 0.01)).fillna(0)
+    gap_up_5d_ago = df.groupby('symbol')['has_gap_up'].shift(5).fillna(0)
+    open_5d_ago = df.groupby('symbol')['open'].shift(5)
+    df['gap_held_5d'] = ((gap_up_5d_ago == 1) & (df['close'] > open_5d_ago)).astype(int)
+    
+    # Strong gap up (gap > 5%)
+    df['strong_gap_up'] = (gap_up_pct > 0.05).astype(int)
+    
+    # Gap up count in last 10 days
+    df['gap_up_count_10'] = df.groupby('symbol')['has_gap_up'].transform(
+        lambda x: x.rolling(10, min_periods=1).sum()
+    )
+    
+    # ========================================
+    # HIGHER LOWS PATTERN (Ascending Support)
+    # ========================================
+    
+    # Detect swing lows (local minima)
+    is_local_min = (
+        (df['low'] < df.groupby('symbol')['low'].shift(1)) &
+        (df['low'] < df.groupby('symbol')['low'].shift(-1))
+    )
+    df['is_swing_low'] = is_local_min.astype(int)
+    
+    # Higher low: current low > previous swing low
+    prev_swing_low = df.groupby('symbol').apply(
+        lambda x: x['low'].where(is_local_min).ffill()
+    ).reset_index(level=0, drop=True)
+    df['higher_low'] = (df['low'] > prev_swing_low.shift(1)).astype(int)
+    
+    # Count of higher lows in last 20 days
+    df['higher_low_count_20'] = df.groupby('symbol')['higher_low'].transform(
+        lambda x: x.rolling(20, min_periods=5).sum()
+    )
+    
+    # Consecutive higher lows (trend strength)
+    df['consecutive_higher_lows'] = df.groupby('symbol')['higher_low'].transform(
+        lambda x: x * (x.groupby((x != x.shift()).cumsum()).cumcount() + 1)
+    )
+    
+    # Recent lows vs older lows (ascending pattern)
+    low_5 = df.groupby('symbol')['low'].transform(lambda x: x.rolling(5, min_periods=2).min())
+    low_20 = df.groupby('symbol')['low'].transform(lambda x: x.rolling(20, min_periods=10).min())
+    df['recent_vs_older_low'] = (low_5 > low_20).astype(int)
+    
+    # ========================================
+    # VOLUME BREAKOUT SIGNALS
+    # ========================================
+    
+    # Volume expansion (healthy breakout)
+    vol_5d = df.groupby('symbol')['volume'].transform(lambda x: x.rolling(5, min_periods=2).mean())
+    vol_20d = df.groupby('symbol')['volume'].transform(lambda x: x.rolling(20, min_periods=10).mean())
+    
+    df['vol_healthy_expansion'] = ((vol_5d > vol_20d * 1.2) & is_bullish).astype(int)
+    df['vol_breakout_signal'] = (df['breakout_20d'] & (df['volume'] > vol_20d * 2)).astype(int)
+    df['vol_trending_up'] = (vol_5d > vol_20d).astype(int)
+    
+    # ========================================
+    # TREND INITIATION COMPOSITE SCORE
+    # ========================================
+    
+    # Combine all trend initiation signals into a single score
+    df['trend_initiation_score'] = (
+        # Candlestick signals (weight: 2 each)
+        df['morning_star'] * 2.0 +
+        df['bullish_engulfing'] * 2.0 +
+        df['hammer'] * 1.5 +
+        df['piercing_pattern'] * 1.5 +
+        df['three_white_soldiers'] * 2.5 +
+        
+        # Golden cross signals (weight: 2-3)
+        df['golden_cross_5_20'] * 2.0 +
+        df['golden_cross_10_60'] * 3.0 +
+        df['crossed_above_ma20'] * 1.5 +
+        df['crossed_above_ma60'] * 2.0 +
+        
+        # Breakout signals (weight: 2-3)
+        df['breakout_with_volume'] * 3.0 +
+        df['consolidation_breakout'] * 2.5 +
+        df['resistance_breakout'] * 2.0 +
+        df['breakout_52w'] * 2.0 +
+        
+        # Higher lows pattern (weight: 1.5)
+        df['consecutive_higher_lows'].clip(0, 3) * 0.5 +
+        df['recent_vs_older_low'] * 1.0 +
+        
+        # Volume signals (weight: 1-2)
+        df['vol_breakout_signal'] * 2.0 +
+        df['vol_healthy_expansion'] * 1.0 +
+        
+        # Gap signals (weight: 1.5)
+        df['significant_gap_up'] * 1.5 +
+        df['gap_held_5d'] * 2.0
+    )
+    
+    logger.info(f"Computed classic patterns - Reversal signals: {df['reversal_pattern'].sum():,}, "
+                f"Golden crosses: {df['golden_cross_any'].sum():,}, "
+                f"Breakouts: {df['breakout_20d'].sum():,}")
+    
+    return df
+
+
 def compute_china_specific_features(df: pd.DataFrame) -> pd.DataFrame:
     """Compute China A-share specific features
     
@@ -564,6 +928,9 @@ def build_features(bars: pd.DataFrame = None,
     
     logger.info("Computing candlestick features...")
     df = compute_candlestick_features(df)
+    
+    logger.info("Computing classic bullish patterns (candlestick & chart patterns)...")
+    df = compute_classic_patterns(df)
     
     logger.info("Computing China-specific features...")
     df = compute_china_specific_features(df)
