@@ -126,14 +126,14 @@ class TwoStageModel:
             max_train_samples = 1000000
             logger.info("BALANCED MODE: 50 trees, depth 7, 1M samples (~24s)")
         else:
-            rf_n_estimators = 100
-            rf_max_depth = 10
-            gb_n_estimators = 100
+            rf_n_estimators = 80
+            rf_max_depth = 8
+            gb_n_estimators = 80
             gb_max_depth = 5
-            # Cap at 2M samples to prevent GitHub Actions timeout
-            # 3.3M samples with 100 trees takes too long on shared runners
-            max_train_samples = 2000000
-            logger.info("FULL MODE: 100 trees, depth 10, 2M samples (~2-3min)")
+            # Reduced from 2M to 1.5M samples to prevent GitHub Actions cancellation
+            # More conservative parameters for CI stability
+            max_train_samples = 1500000
+            logger.info("FULL MODE: 80 trees, depth 8, 1.5M samples (~2min)")
         
         # Set feature columns
         self.feature_cols = feature_cols or [c for c in FEATURE_COLS if c in df.columns]
