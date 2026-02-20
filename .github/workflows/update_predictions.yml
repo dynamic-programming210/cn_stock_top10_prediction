@@ -413,54 +413,21 @@ jobs:
           fi
           
           echo ""
-          echo "=== Training both models in parallel ($TRAIN_MODE mode) ==="
-          
-          # Train both models in parallel to reduce total time
-          # Each model takes ~8-10 min in full mode, running in parallel saves ~8 min
-          python models/train.py --retrain $TRAIN_FLAGS > /tmp/train_5d.log 2>&1 &
-          PID_5D=$!
-          python models/train_15d.py $TRAIN_FLAGS > /tmp/train_15d.log 2>&1 &
-          PID_15D=$!
-          
-          echo "Started 5-day model training (PID: $PID_5D)"
-          echo "Started 15-day model training (PID: $PID_15D)"
-          echo "Waiting for both to complete..."
-          
-          # Wait for both processes and capture exit codes
-          wait $PID_5D
-          EXIT_5D=$?
-          wait $PID_15D
-          EXIT_15D=$?
+          echo "=== Training 5-day model ($TRAIN_MODE mode) ==="
+          # Run sequentially to avoid OOM (parallel uses ~12-16GB, exceeds runner limit)
+          time python models/train.py --retrain $TRAIN_FLAGS
+          echo "✅ 5-day model trained"
+          ls -la models/ranker.txt models/regressor.pkl 2>/dev/null || true
           
           echo ""
-          echo "=== 5-day model output ==="
-          cat /tmp/train_5d.log
+          echo "=== Training 15-day model ($TRAIN_MODE mode) ==="
+          time python models/train_15d.py $TRAIN_FLAGS
+          echo "✅ 15-day model trained"
+          ls -la models/ranker_15d.txt models/regressor_15d.pkl 2>/dev/null || true
           
-          echo ""
-          echo "=== 15-day model output ==="
-          cat /tmp/train_15d.log
-          
-          echo ""
-          if [ $EXIT_5D -eq 0 ]; then
-            echo "✅ 5-day model trained successfully"
-          else
-            echo "❌ 5-day model training failed (exit code: $EXIT_5D)"
-          fi
-          
-          if [ $EXIT_15D -eq 0 ]; then
-            echo "✅ 15-day model trained successfully"
-          else
-            echo "❌ 15-day model training failed (exit code: $EXIT_15D)"
-          fi
-          
-          ls -la models/*.pkl models/*.txt 2>/dev/null || echo "Model files:"
           echo ""
           echo "=== Training Complete ==="
-          
-          # Fail if either model failed
-          if [ $EXIT_5D -ne 0 ] || [ $EXIT_15D -ne 0 ]; then
-            exit 1
-          fi
+          ls -la models/*.pkl models/*.txt 2>/dev/null || echo "Model files:"
       
       - name: Generate predictions
         id: gen_pred
