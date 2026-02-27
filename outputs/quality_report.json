@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-02-27T08:56:59.646836",
+  "generated_at": "2026-02-27T21:43:03.041640",
   "asof_date": "2026-02-27",
   "data": {
-    "total_bars": 3533491,
+    "total_bars": 3537637,
     "unique_symbols": 4911,
     "date_range": "2023-02-28 to 2026-02-27",
     "exchanges": [
@@ -11,10 +11,10 @@
     ]
   },
   "features": {
-    "total_rows": 3533491,
+    "total_rows": 3537637,
     "unique_symbols": 4911
   },
   "coverage": {
-    "asof_date_rate": 0.15577275503970678
+    "asof_date_rate": 0.998167379352474
   }
 }
